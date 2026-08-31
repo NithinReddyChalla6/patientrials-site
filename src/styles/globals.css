@@ -1,0 +1,181 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/*
+  PatienTrials Site Portal — design tokens.
+
+  Values are RGB channel triplets so Tailwind can apply alpha (e.g. bg-brand/10).
+*/
+@layer base {
+  :root {
+    /*
+      Clinical enterprise palette.
+
+      The previous warm sienna-on-cream reads editorial; regulated clinical
+      software (Veeva Vault, Medidata Rave, IBM Carbon) is built on a cool
+      neutral ground with a single saturated blue carrying action, because the
+      screen is mostly data and colour has to mean something when it appears.
+    */
+
+    /* Surfaces — cool neutral ground, white data surfaces */
+    --background: 247 248 250; /* #F7F8FA */
+    --sunken: 241 243 246; /* #F1F3F6 — table headers, sidebar, toolbars */
+    --foreground: 17 24 39; /* #111827 — 15.9:1 on background */
+    --card: 255 255 255;
+    --card-foreground: 17 24 39;
+    --popover: 255 255 255;
+    --popover-foreground: 17 24 39;
+
+    /* Primary = ink for neutral chrome actions */
+    --primary: 31 41 55; /* #1F2937 */
+    --primary-foreground: 255 255 255;
+    --secondary: 241 243 246;
+    --secondary-foreground: 31 41 55;
+
+    /* Brand = PatienTrials azure. Lead action, active nav, focus ring, links. */
+    --brand: 3 105 161; /* #0369A1 — white text 5.9:1 (AA) */
+    --brand-foreground: 255 255 255;
+
+    /* CTA = PatienTrials orange. Reserved for the patient-facing path and single
+       highlights, so the warm accent keeps meaning on a data-dense screen.
+       (The brighter #19C3F3 cyan / #F7912E orange are decorative-only — logo,
+       hover glows — never behind text, where they fail contrast.) */
+    --cta: 194 65 12; /* #C2410C — white text 5.2:1 (AA) */
+    --cta-foreground: 255 255 255;
+
+    /* Neutrals */
+    --muted: 241 243 246;
+    --muted-foreground: 91 100 114; /* #5B6472 — 5.6:1 on background */
+    --accent: 230 241 251; /* #E6F1FB — azure tint for selected rows */
+    --accent-foreground: 3 105 161;
+
+    /* Status — all validated to at least 4.5:1 on white */
+    --destructive: 180 35 24; /* #B42318 */
+    --destructive-foreground: 255 255 255;
+    --success: 21 128 61; /* #157D3D */
+    --success-foreground: 255 255 255;
+    --warning: 180 83 9; /* #B45309 */
+    --warning-foreground: 255 255 255;
+    --info: 14 116 144; /* #0E7490 */
+    --info-foreground: 255 255 255;
+
+    /* Lines & focus — hairlines, because a data screen is mostly rules */
+    --border: 223 227 234; /* #DFE3EA */
+    --input: 203 210 220; /* #CBD2DC */
+    --ring: 3 105 161;
+
+    --radius: 0.375rem; /* 6px — enterprise controls, not pill-shaped cards */
+
+    /* Row heights for the data grid: condensed / regular / relaxed. */
+    --row-condensed: 40px;
+    --row-regular: 48px;
+    --row-relaxed: 56px;
+  }
+
+  * {
+    @apply border-border;
+  }
+
+  html {
+    -webkit-text-size-adjust: 100%;
+  }
+
+  body {
+    @apply bg-background text-foreground font-sans antialiased;
+    font-feature-settings: 'cv11', 'ss01';
+  }
+
+  h1,
+  h2,
+  h3,
+  h4 {
+    @apply font-display tracking-[-0.01em];
+  }
+
+  /* One focus treatment everywhere. Never removed, only re-targeted. */
+  :focus-visible {
+    @apply outline-none ring-2 ring-ring ring-offset-2 ring-offset-background;
+  }
+
+  /* Numeric IDs (NCT…, PT…, STU…) are scanned and compared, so they get tabular
+     mono treatment wherever they appear. */
+  .id {
+    @apply font-mono text-[0.9em] tracking-tight;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+      animation-duration: 0.01ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.01ms !important;
+      scroll-behavior: auto !important;
+    }
+  }
+}
+
+@layer components {
+  /* Keyboard-only escape hatch to the main content of every page. */
+  .skip-link {
+    @apply sr-only focus:not-sr-only focus:fixed focus:left-4 focus:top-4 focus:z-50
+           focus:rounded-md focus:bg-primary focus:px-4 focus:py-2
+           focus:text-sm focus:font-semibold focus:text-primary-foreground;
+  }
+}
+
+/*
+  Registration "thank you" moment. Transform / opacity / stroke only, all one-shot
+  on mount. The global prefers-reduced-motion rule above neutralises every one of
+  these, so the page still resolves to its final state without motion.
+*/
+@keyframes rt-pop {
+  0% {
+    transform: scale(0.7);
+    opacity: 0;
+  }
+  60% {
+    transform: scale(1.06);
+    opacity: 1;
+  }
+  100% {
+    transform: scale(1);
+    opacity: 1;
+  }
+}
+@keyframes rt-check {
+  to {
+    stroke-dashoffset: 0;
+  }
+}
+@keyframes rt-ripple {
+  0% {
+    transform: scale(0.75);
+    opacity: 0.5;
+  }
+  100% {
+    transform: scale(2.4);
+    opacity: 0;
+  }
+}
+@keyframes rt-rise {
+  from {
+    transform: translateY(12px);
+    opacity: 0;
+  }
+  to {
+    transform: translateY(0);
+    opacity: 1;
+  }
+}
+@keyframes rt-confetti {
+  0% {
+    transform: translate3d(0, 0, 0) rotate(0);
+    opacity: 1;
+  }
+  100% {
+    transform: translate3d(0, var(--rt-fall, 150px), 0) rotate(var(--rt-rot, 220deg));
+    opacity: 0;
+  }
+}

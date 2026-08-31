@@ -1,0 +1,17 @@
+node_modules
+dist
+.DS_Store
+*.local
+
+# MCP config (contains API key)
+.mcp.json
+
+# Local auth database (created on first server run)
+server/data.sqlite
+*.sqlite
+
+.vercel
+
+# Environment files (never commit secrets like DATABASE_URL)
+.env
+.env.*

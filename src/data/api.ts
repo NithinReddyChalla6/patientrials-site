@@ -1,0 +1,1196 @@
+import type {
+  ApprovedLocation,
+  AppointmentTemplate,
+  Facility,
+  FormCategory,
+  FormType,
+  IrbDetail,
+  Lab,
+  NotificationGroup,
+  NotificationQuestion,
+  Paged,
+  PastTrial,
+  PrescreeningGroup,
+  PrescreeningQuestion,
+  PublicTrial,
+  Role,
+  Site,
+  SiteInitiationResponse,
+  Study,
+  StudyForm,
+  StudyWithCounts,
+  StudyPromotion,
+  StudyRequest,
+  Subject,
+  SubjectStatus,
+  TrialPhase,
+  User,
+} from './types'
+import * as seed from './mock/seed'
+
+/**
+ * The single seam between the UI and its data.
+ *
+ * Every screen reads and writes through this module, so replacing the mock with
+ * a real backend is a change to this file alone. It deliberately behaves like a
+ * network: calls are async, they take time, and they can fail — which is what
+ * makes the loading and error states in the UI real rather than decorative.
+ */
+
+/* -------------------------------------------------------- dev simulation */
+
+export type SimulationMode = 'normal' | 'slow' | 'error' | 'empty'
+
+interface DevSettings {
+  mode: SimulationMode
+  latency: number
+}
+
+const dev: DevSettings = { mode: 'normal', latency: 260 }
+
+/** Read once at boot so a deep link like `?sim=error` reproduces a state. */
+export function initSimulationFromUrl(search: string) {
+  const mode = new URLSearchParams(search).get('sim') as SimulationMode | null
+  if (mode && ['normal', 'slow', 'error', 'empty'].includes(mode)) dev.mode = mode
+}
+
+export function getSimulation() {
+  return { ...dev }
+}
+
+export function setSimulation(mode: SimulationMode) {
+  dev.mode = mode
+}
+
+export class ApiError extends Error {
+  constructor(
+    message: string,
+    readonly code: 'duplicate' | 'not_found' | 'invalid' | 'network' = 'network',
+  ) {
+    super(message)
+    this.name = 'ApiError'
+  }
+}
+
+function wait(): Promise<void> {
+  const ms = dev.mode === 'slow' ? 2200 : dev.latency
+  return new Promise((resolve) => setTimeout(resolve, ms))
+}
+
+/** Gate for reads: honours the simulated error mode, then yields the payload. */
+async function read<T>(produce: () => T, emptyValue?: T): Promise<T> {
+  await wait()
+  if (dev.mode === 'error') {
+    throw new ApiError('We could not reach the server. Check your connection and try again.')
+  }
+  if (dev.mode === 'empty' && emptyValue !== undefined) return emptyValue
+  return produce()
+}
+
+/**
+ * Gate for writes: writes always run for real so the demo stays coherent, then
+ * the whole store is persisted so nothing is lost on a refresh.
+ */
+async function write<T>(produce: () => T): Promise<T> {
+  await wait()
+  if (dev.mode === 'error') {
+    throw new ApiError('The change could not be saved. Please try again.')
+  }
+  const result = produce()
+  await persistState()
+  return result
+}
+
+const emptyPage = <T>(): Paged<T> => ({ items: [], total: 0, page: 1, pageSize: 10 })
+
+/* ------------------------------------------------------------ mutable db */
+
+const clone = <T>(v: T): T => JSON.parse(JSON.stringify(v)) as T
+
+const db = {
+  site: clone(seed.site),
+  users: clone(seed.users),
+  pastTrials: clone(seed.pastTrials),
+  irbDetails: clone(seed.irbDetails),
+  labs: clone(seed.labs),
+  facilities: clone(seed.facilities),
+  studies: clone(seed.studies),
+  studyRequests: clone(seed.studyRequests),
+  subjects: clone(seed.subjects),
+  prescreening: clone(seed.prescreeningQuestions),
+  forms: clone(seed.forms),
+  appointments: clone(seed.appointmentTemplates),
+  notificationGroups: clone(seed.notificationGroups),
+  approvedLocations: clone(seed.approvedLocations),
+  publicTrials: clone(seed.publicTrials),
+}
+
+let idCounter = 9000
+const nextId = (prefix: string) => `${prefix}-${(idCounter += 1)}`
+const now = () => new Date().toISOString()
+
+/**
+ * Stand-in for the ClinicalTrials.gov lookup the legacy "New Study Request"
+ * performed. Only these identifiers resolve; anything else is reported as not
+ * found, which is the error branch the legacy spec exercised.
+ */
+const REGISTRY: Record<
+  string,
+  { title: string; condition: string; phase: TrialPhase; sponsor: string; summary: string }
+> = {
+  NCT07764380: {
+    title: 'Semaglutide for Weight Management in Adults With Type 2 Diabetes',
+    condition: 'Type 2 Diabetes',
+    phase: 'Phase III',
+    sponsor: 'Novo Nordisk',
+    summary:
+      'This 52-week randomised trial evaluates whether once-weekly semaglutide improves glycaemic control and supports sustained weight loss in adults living with type 2 diabetes.',
+  },
+  NCT06612094: {
+    title: 'Inhaled Triple Therapy in Moderate to Severe COPD',
+    condition: 'COPD',
+    phase: 'Phase II',
+    sponsor: 'AstraZeneca',
+    summary:
+      'A randomised comparison of single-inhaler triple therapy against standard dual therapy on exacerbation rate and lung function in adults with moderate to severe COPD.',
+  },
+  NCT05820117: {
+    title: 'Novel Anticoagulant After Acute Coronary Syndrome',
+    condition: 'Acute Coronary Syndrome',
+    phase: 'Phase II',
+    sponsor: 'Johnson & Johnson',
+    summary:
+      'The purpose of this trial is to determine whether a novel oral anticoagulant reduces recurrent ischaemic events after acute coronary syndrome without increasing major bleeding.',
+  },
+  NCT09004471: {
+    title: 'Early Detection Biomarkers in Non-Small Cell Lung Cancer',
+    condition: 'Non-Small Cell Lung Cancer',
+    phase: 'Phase I',
+    sponsor: 'Roche',
+    summary:
+      'A prospective multi-centre study evaluating a blood-based biomarker panel for the early detection of non-small cell lung cancer in a high-risk screening population.',
+  },
+  NCT02551049: {
+    title: 'Sleep Quality and Glycaemic Control in Adolescents',
+    condition: 'Type 1 Diabetes',
+    phase: 'Phase II',
+    sponsor: 'Sanofi',
+    summary:
+      'An observational study of the relationship between sleep quality and glycaemic variability in adolescents with type 1 diabetes using continuous glucose monitoring.',
+  },
+  NCT01998877: {
+    title: 'Vitamin D Supplementation in Post-Menopausal Osteoporosis',
+    condition: 'Osteoporosis',
+    phase: 'Phase IV',
+    sponsor: 'Amgen',
+    summary:
+      'A double-blind trial of high-dose vitamin D supplementation on bone mineral density and fracture incidence in post-menopausal women with osteoporosis.',
+  },
+}
+
+/** Exposed so the create-study screen can hint at what will resolve. */
+export const REGISTRY_SAMPLE_IDS = Object.keys(REGISTRY)
+
+function paginate<T>(items: T[], page: number, pageSize: number): Paged<T> {
+  const start = (page - 1) * pageSize
+  return { items: items.slice(start, start + pageSize), total: items.length, page, pageSize }
+}
+
+const matches = (haystack: string[], query: string) =>
+  !query.trim() ||
+  haystack.some((h) => h?.toLowerCase().includes(query.trim().toLowerCase()))
+
+/* ------------------------------------------------------------------ auth */
+
+/**
+ * Base URL of the auth + persistence API (see `server/`). Read from
+ * `VITE_API_BASE` at build time — set it on Vercel to the deployed backend URL.
+ * When unset (local dev) it falls back to the dev server on :3001; when the
+ * value is unreachable the app degrades to demo mode.
+ */
+const AUTH_API = (import.meta.env.VITE_API_BASE ?? 'http://localhost:3001').replace(/\/+$/, '')
+
+export interface Session {
+  user: User
+  siteId: string
+  /** Signed JWT from the auth API, held for authenticated calls. */
+  token?: string
+}
+
+/**
+ * Demo fallback for when no auth server is reachable — e.g. a static deploy
+ * (Vercel) with no backend, or a page served over HTTPS that cannot reach the
+ * local API. Any seeded account signs in with a 6+ character password.
+ */
+function demoLogin(email: string, password: string): Session {
+  const user = db.users.find((u) => u.email.toLowerCase() === email.trim().toLowerCase())
+  if (!user || password.length < 6) {
+    throw new ApiError('That email and password combination was not recognised.', 'invalid')
+  }
+  if (!user.active) {
+    throw new ApiError('This account is inactive. Ask your site administrator to re-enable it.', 'invalid')
+  }
+  return { user, siteId: user.siteId }
+}
+
+export const auth = {
+  /**
+   * Real sign-in: the auth API checks the password against a bcrypt hash and
+   * returns a signed token. This is the one call that no longer touches the mock.
+   */
+  async login(email: string, password: string): Promise<Session> {
+    let res: Response
+    try {
+      res = await fetch(`${AUTH_API}/api/auth/login`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email, password }),
+      })
+    } catch {
+      // No auth server reachable (e.g. a static demo deploy) — use demo mode.
+      return demoLogin(email, password)
+    }
+    if (!res.ok) {
+      const body = (await res.json().catch(() => ({}))) as { error?: string }
+      throw new ApiError(body.error ?? 'Sign-in failed.', res.status === 401 ? 'invalid' : undefined)
+    }
+    const data = (await res.json()) as { token: string; user: User; siteId: string }
+    return { user: data.user, siteId: data.siteId, token: data.token }
+  },
+
+  /** Real registration: creates a persisted, bcrypt-hashed account via the API. */
+  async register(input: {
+    email: string
+    firstName: string
+    lastName: string
+    password: string
+    role: Role
+    siteId?: string
+  }): Promise<void> {
+    let res: Response
+    try {
+      res = await fetch(`${AUTH_API}/api/auth/register`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(input),
+      })
+    } catch {
+      // No auth server reachable — accept the sign-up in demo mode.
+      if (db.users.some((u) => u.email.toLowerCase() === input.email.toLowerCase())) {
+        throw new ApiError('An account already exists for this email address.', 'duplicate')
+      }
+      return
+    }
+    if (!res.ok) {
+      const body = (await res.json().catch(() => ({}))) as { error?: string }
+      throw new ApiError(
+        body.error ?? 'Registration failed.',
+        res.status === 409 ? 'duplicate' : undefined,
+      )
+    }
+  },
+
+  /** Demo affordance: sign in as any seeded user to see role-gated navigation. */
+  async listDemoAccounts(): Promise<User[]> {
+    return read(() => db.users.filter((u) => u.active))
+  },
+}
+
+/* ----------------------------------------------------------- persistence */
+
+const SITE_STATE_URL = `${AUTH_API}/api/site-state`
+
+/**
+ * The whole in-memory store is persisted to SQLite so entered data — onboarding,
+ * studies, participants, forms, everything — survives a page refresh.
+ * `hydrateSiteState` loads it on boot; every `write()` saves it back. On the
+ * first run the store is empty, so the seed already in `db` is pushed up to
+ * become the baseline. If the server is unreachable the app runs on the seed.
+ */
+export async function hydrateSiteState(): Promise<void> {
+  try {
+    const res = await fetch(SITE_STATE_URL)
+    if (!res.ok) return
+    const data = await res.json()
+    if (data && typeof data === 'object') {
+      const store = db as Record<string, unknown>
+      const saved = data as Record<string, unknown>
+      for (const key of Object.keys(store)) {
+        if (key in saved) store[key] = saved[key]
+      }
+    } else {
+      await persistState()
+    }
+  } catch {
+    // Data server not running — keep working on the in-memory seed.
+  }
+}
+
+/** Save the whole store. Best-effort — the in-memory change already applied. */
+async function persistState(): Promise<void> {
+  try {
+    await fetch(SITE_STATE_URL, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(db),
+    })
+  } catch {
+    // ignore; persistence is best-effort
+  }
+}
+
+/** Back-compat alias — `write()` persists automatically now. */
+const writePersist = write
+
+/* ------------------------------------------------------------------ site */
+
+export const siteApi = {
+  get: () => read<Site>(() => clone(db.site)),
+  update: (patch: Partial<Site>) =>
+    writePersist(() => {
+      db.site = { ...db.site, ...patch }
+      return clone(db.site)
+    }),
+
+  listPastTrials: () => read<PastTrial[]>(() => clone(db.pastTrials), []),
+  addPastTrial: (input: Omit<PastTrial, 'id' | 'siteId'>) =>
+    writePersist(() => {
+      const record: PastTrial = { ...input, id: nextId('PT'), siteId: db.site.id }
+      db.pastTrials.push(record)
+      return record
+    }),
+  updatePastTrial: (id: string, patch: Partial<Omit<PastTrial, 'id' | 'siteId'>>) =>
+    writePersist(() => {
+      const i = db.pastTrials.findIndex((t) => t.id === id)
+      if (i === -1) throw new ApiError('Past trial not found.', 'not_found')
+      db.pastTrials[i] = { ...db.pastTrials[i], ...patch }
+      return clone(db.pastTrials[i])
+    }),
+  removePastTrial: (id: string) =>
+    writePersist(() => {
+      db.pastTrials = db.pastTrials.filter((t) => t.id !== id)
+    }),
+
+  listIrb: () => read<IrbDetail[]>(() => clone(db.irbDetails), []),
+  addIrb: (input: Omit<IrbDetail, 'id' | 'siteId'>) =>
+    writePersist(() => {
+      const record: IrbDetail = { ...input, id: nextId('IRB'), siteId: db.site.id }
+      db.irbDetails.push(record)
+      return record
+    }),
+  updateIrb: (id: string, patch: Partial<Omit<IrbDetail, 'id' | 'siteId'>>) =>
+    writePersist(() => {
+      const i = db.irbDetails.findIndex((t) => t.id === id)
+      if (i === -1) throw new ApiError('IRB not found.', 'not_found')
+      db.irbDetails[i] = { ...db.irbDetails[i], ...patch }
+      return clone(db.irbDetails[i])
+    }),
+  removeIrb: (id: string) =>
+    writePersist(() => {
+      db.irbDetails = db.irbDetails.filter((t) => t.id !== id)
+    }),
+
+  listLabs: () => read<Lab[]>(() => clone(db.labs), []),
+  addLab: (input: Omit<Lab, 'id' | 'siteId'>) =>
+    writePersist(() => {
+      const record: Lab = { ...input, id: nextId('LAB'), siteId: db.site.id }
+      db.labs.push(record)
+      return record
+    }),
+  updateLab: (id: string, patch: Partial<Omit<Lab, 'id' | 'siteId'>>) =>
+    writePersist(() => {
+      const i = db.labs.findIndex((t) => t.id === id)
+      if (i === -1) throw new ApiError('Lab not found.', 'not_found')
+      db.labs[i] = { ...db.labs[i], ...patch }
+      return clone(db.labs[i])
+    }),
+  removeLab: (id: string) =>
+    writePersist(() => {
+      db.labs = db.labs.filter((t) => t.id !== id)
+    }),
+
+  listFacilities: () => read<Facility[]>(() => clone(db.facilities), []),
+  addFacility: (input: Omit<Facility, 'id' | 'siteId'>) =>
+    writePersist(() => {
+      const record: Facility = { ...input, id: nextId('FAC'), siteId: db.site.id }
+      db.facilities.push(record)
+      return record
+    }),
+  updateFacility: (id: string, patch: Partial<Omit<Facility, 'id' | 'siteId'>>) =>
+    writePersist(() => {
+      const i = db.facilities.findIndex((t) => t.id === id)
+      if (i === -1) throw new ApiError('Facility not found.', 'not_found')
+      db.facilities[i] = { ...db.facilities[i], ...patch }
+      return clone(db.facilities[i])
+    }),
+  removeFacility: (id: string) =>
+    writePersist(() => {
+      db.facilities = db.facilities.filter((t) => t.id !== id)
+    }),
+
+  listCollaborators: () => read<User[]>(() => clone(db.users), []),
+  addCollaborator: (input: {
+    firstName: string
+    lastName: string
+    email: string
+    role: Role
+  }) =>
+    writePersist(() => {
+      if (db.users.some((u) => u.email.toLowerCase() === input.email.toLowerCase())) {
+        throw new ApiError('This person has already been added to the site.', 'duplicate')
+      }
+      const record: User = {
+        ...input,
+        id: nextId('USR'),
+        siteId: db.site.id,
+        active: true,
+        invitedAt: now(),
+      }
+      db.users.push(record)
+      return record
+    }),
+  updateCollaborator: (id: string, patch: Partial<User>) =>
+    writePersist(() => {
+      const i = db.users.findIndex((u) => u.id === id)
+      if (i === -1) throw new ApiError('Collaborator not found.', 'not_found')
+      db.users[i] = { ...db.users[i], ...patch }
+      return clone(db.users[i])
+    }),
+  removeCollaborator: (id: string) =>
+    writePersist(() => {
+      db.users = db.users.filter((u) => u.id !== id)
+    }),
+  resetCollaboratorPassword: (id: string) =>
+    write(() => {
+      const user = db.users.find((u) => u.id === id)
+      if (!user) throw new ApiError('Collaborator not found.', 'not_found')
+      return user.email
+    }),
+
+  /**
+   * Everything the onboarding wizard needs, in one read.
+   *
+   * The wizard shows completion across all six sections at once, so fetching
+   * them together keeps the stepper consistent and avoids six spinners.
+   */
+  onboardingSnapshot: () =>
+    read(() => ({
+      site: clone(db.site),
+      pastTrials: clone(db.pastTrials),
+      irbDetails: clone(db.irbDetails),
+      labs: clone(db.labs),
+      facilities: clone(db.facilities),
+      collaborators: clone(db.users),
+    })),
+
+  /** Feeds the "assign a person" combobox that replaced the lookup popup. */
+  lookupPeople: (role?: Role) =>
+    read<User[]>(
+      () => clone(db.users.filter((u) => u.active && (!role || u.role === role))),
+      [],
+    ),
+}
+
+/* --------------------------------------------------------------- studies */
+
+export interface StudyQuery {
+  query?: string
+  status?: 'all' | 'promoted' | 'active' | 'archived'
+  page?: number
+  pageSize?: number
+}
+
+export const studiesApi = {
+  list: ({ query = '', status = 'all', page = 1, pageSize = 12 }: StudyQuery = {}) =>
+    read<Paged<StudyWithCounts>>(() => {
+      const filtered = db.studies
+        .filter((s) => status === 'all' || s.status === status)
+        .filter((s) => matches([s.id, s.nctId, s.title, s.condition, s.sponsor], query))
+        .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
+        .map<StudyWithCounts>((study) => {
+          const people = db.subjects.filter((s) => s.studyId === study.id)
+          return {
+            ...study,
+            // "Prospects" are everyone still in screening; "subjects" are enrolled.
+            prospects: people.filter((s) => s.status === 'pending' || s.status === 'validated')
+              .length,
+            subjects: people.filter((s) => s.status === 'recruited').length,
+          }
+        })
+      return paginate(clone(filtered), page, pageSize)
+    }, emptyPage<StudyWithCounts>()),
+
+  counts: () =>
+    read(() => ({
+      promoted: db.studies.filter((s) => s.status === 'promoted').length,
+      active: db.studies.filter((s) => s.status === 'active').length,
+      archived: db.studies.filter((s) => s.status === 'archived').length,
+      all: db.studies.length,
+    })),
+
+  get: (id: string) =>
+    read<Study>(() => {
+      const study = db.studies.find((s) => s.id === id || s.nctId === id)
+      if (!study) throw new ApiError(`No study found for ${id}.`, 'not_found')
+      return clone(study)
+    }),
+
+  /** Step one of Create Study: resolve the NCT number, refusing duplicates. */
+  lookupNct: (nctId: string) =>
+    read(() => {
+      const key = nctId.trim().toUpperCase()
+      if (db.studies.some((s) => s.nctId === key)) {
+        throw new ApiError(
+          `${key} is already on your site as a study. Open it from the Studies list instead.`,
+          'duplicate',
+        )
+      }
+      const found = REGISTRY[key]
+      if (!found) {
+        throw new ApiError(
+          `No registry record found for ${key}. Check the number and try again.`,
+          'not_found',
+        )
+      }
+      return { nctId: key, ...found }
+    }),
+
+  create: (input: {
+    nctId: string
+    title: string
+    condition: string
+    phase: TrialPhase
+    sponsor: string
+    summary: string
+  }) =>
+    write(() => {
+      const study: Study = {
+        id: `STU${String(1400 + db.studies.length + 1).padStart(5, '0')}`,
+        nctId: input.nctId,
+        title: input.title,
+        condition: input.condition,
+        phase: input.phase,
+        sponsor: input.sponsor,
+        status: 'active',
+        recruitmentStatus: 'Not yet recruiting',
+        briefSummary: input.summary,
+        consentDocuments: 0,
+        enrollmentTarget: 0,
+        enrolled: 0,
+        createdAt: now(),
+      }
+      db.studies.unshift(study)
+      return clone(study)
+    }),
+
+  promote: (id: string, promotion: StudyPromotion) =>
+    write(() => {
+      const study = db.studies.find((s) => s.id === id)
+      if (!study) throw new ApiError('Study not found.', 'not_found')
+      study.status = 'promoted'
+      study.promotion = promotion
+      study.promotedAt = now()
+      if (!db.publicTrials.some((t) => t.nctId === study.nctId)) {
+        db.publicTrials.push({
+          nctId: study.nctId,
+          studyId: study.id,
+          title: study.title,
+          summary: promotion.upcomingResearch[0] ?? study.title,
+          condition: study.condition,
+          phase: study.phase,
+          recruitmentStatus: study.recruitmentStatus,
+          sponsor: study.sponsor,
+          minimumAge: promotion.minimumAge,
+          locations: promotion.locations,
+          eligibility: promotion.conditions,
+          estimatedDuration: 'To be confirmed',
+        })
+      }
+      return clone(study)
+    }),
+
+  assignInvestigator: (studyId: string, userId: string, note: string) =>
+    write(() => {
+      const study = db.studies.find((s) => s.id === studyId)
+      if (!study) throw new ApiError('Study not found.', 'not_found')
+      if (!note.trim()) throw new ApiError('A change note is required.', 'invalid')
+      study.principalInvestigatorId = userId
+      return clone(study)
+    }),
+
+  setStatus: (studyId: string, status: Study['status']) =>
+    write(() => {
+      const study = db.studies.find((s) => s.id === studyId)
+      if (!study) throw new ApiError('Study not found.', 'not_found')
+      study.status = status
+      return clone(study)
+    }),
+}
+
+/* -------------------------------------------------------- study requests */
+
+export const requestsApi = {
+  list: (query = '') =>
+    read<StudyRequest[]>(
+      () =>
+        clone(
+          db.studyRequests
+            .filter((r) => matches([r.id, r.nctId, r.title, r.sponsor], query))
+            .sort((a, b) => b.submittedAt.localeCompare(a.submittedAt)),
+        ),
+      [],
+    ),
+
+  get: (id: string) =>
+    read<StudyRequest>(() => {
+      const record = db.studyRequests.find((r) => r.id === id)
+      if (!record) throw new ApiError(`No study request found for ${id}.`, 'not_found')
+      return clone(record)
+    }),
+
+  /** Mirrors the legacy Insert: duplicates are rejected, not silently merged. */
+  create: (nctId: string) =>
+    write(() => {
+      const key = nctId.trim().toUpperCase()
+      if (db.studyRequests.some((r) => r.nctId === key)) {
+        throw new ApiError(
+          `A study request for ${key} already exists on this site.`,
+          'duplicate',
+        )
+      }
+      const found = REGISTRY[key]
+      if (!found) {
+        throw new ApiError(`No registry record found for ${key}.`, 'not_found')
+      }
+      const record: StudyRequest = {
+        id: `SR${String(1600 + db.studyRequests.length).padStart(7, '0')}`,
+        nctId: key,
+        title: found.title,
+        sponsor: found.sponsor,
+        status: 'submitted',
+        submittedAt: now(),
+      }
+      db.studyRequests.unshift(record)
+      return clone(record)
+    }),
+
+  respond: (id: string, response: Omit<SiteInitiationResponse, 'submittedAt'>) =>
+    write(() => {
+      const record = db.studyRequests.find((r) => r.id === id)
+      if (!record) throw new ApiError('Study request not found.', 'not_found')
+      record.response = { ...response, submittedAt: now() }
+      record.status = response.interested === 'yes' ? 'under_review' : 'declined'
+      return clone(record)
+    }),
+}
+
+/* -------------------------------------------------------------- subjects */
+
+export interface SubjectQuery {
+  studyId: string
+  query?: string
+  status?: SubjectStatus | 'all'
+  page?: number
+  pageSize?: number
+}
+
+export const subjectsApi = {
+  list: ({ studyId, query = '', status = 'all', page = 1, pageSize = 10 }: SubjectQuery) =>
+    read<Paged<Subject>>(() => {
+      const filtered = db.subjects
+        .filter((s) => s.studyId === studyId)
+        .filter((s) => status === 'all' || s.status === status)
+        .filter((s) => matches([s.id, s.firstName, s.lastName, s.email, s.city], query))
+        .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
+      return paginate(clone(filtered), page, pageSize)
+    }, emptyPage<Subject>()),
+
+  counts: (studyId: string) =>
+    read(() => {
+      const all = db.subjects.filter((s) => s.studyId === studyId)
+      return {
+        all: all.length,
+        pending: all.filter((s) => s.status === 'pending').length,
+        validated: all.filter((s) => s.status === 'validated').length,
+        recruited: all.filter((s) => s.status === 'recruited').length,
+        rejected: all.filter((s) => s.status === 'rejected').length,
+      }
+    }),
+
+  /**
+   * Apply one decision to many participants.
+   *
+   * Screening arrives in batches, so acting one row at a time is the single
+   * biggest cost in the legacy flow. Returns the ids actually changed so the UI
+   * can report precisely.
+   */
+  setStatusMany: (ids: string[], status: SubjectStatus) =>
+    write(() => {
+      const changed: string[] = []
+      ids.forEach((id) => {
+        const subject = db.subjects.find((s) => s.id === id)
+        if (!subject || subject.status === status) return
+        subject.status = status
+        changed.push(id)
+        if (status === 'recruited') {
+          const study = db.studies.find((s) => s.id === subject.studyId)
+          if (study) study.enrolled += 1
+        }
+      })
+      return changed
+    }),
+
+  /** Validate / Reject / Recruit, the three legacy record actions. */
+  setStatus: (id: string, status: SubjectStatus) =>
+    write(() => {
+      const subject = db.subjects.find((s) => s.id === id)
+      if (!subject) throw new ApiError('Participant not found.', 'not_found')
+      subject.status = status
+      if (status === 'recruited') {
+        const study = db.studies.find((s) => s.id === subject.studyId)
+        if (study) study.enrolled += 1
+      }
+      return clone(subject)
+    }),
+}
+
+/* --------------------------------------------------------- pre-screening */
+
+export const prescreeningApi = {
+  list: (studyId: string, group: PrescreeningGroup) =>
+    read<PrescreeningQuestion[]>(
+      () =>
+        clone(
+          db.prescreening
+            .filter((q) => q.studyId === studyId && q.group === group)
+            .sort((a, b) => a.order - b.order),
+        ),
+      [],
+    ),
+
+  create: (input: Omit<PrescreeningQuestion, 'id'>) =>
+    write(() => {
+      const record: PrescreeningQuestion = { ...input, id: nextId('PSQ') }
+      db.prescreening.push(record)
+      return clone(record)
+    }),
+
+  update: (id: string, patch: Partial<PrescreeningQuestion>) =>
+    write(() => {
+      const i = db.prescreening.findIndex((q) => q.id === id)
+      if (i === -1) throw new ApiError('Question not found.', 'not_found')
+      db.prescreening[i] = { ...db.prescreening[i], ...patch }
+      return clone(db.prescreening[i])
+    }),
+
+  remove: (id: string) =>
+    write(() => {
+      db.prescreening = db.prescreening.filter((q) => q.id !== id)
+    }),
+}
+
+/* ----------------------------------------------------------------- forms */
+
+export interface FormQuery {
+  category?: FormCategory
+  status?: 'all' | 'draft' | 'published'
+  query?: string
+}
+
+export const formsApi = {
+  list: ({ category, status = 'all', query = '' }: FormQuery = {}) =>
+    read<StudyForm[]>(
+      () =>
+        clone(
+          db.forms
+            .filter((f) => !category || f.category === category)
+            .filter((f) => status === 'all' || f.status === status)
+            .filter((f) => matches([f.title, f.description, f.type], query))
+            .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt)),
+        ),
+      [],
+    ),
+
+  get: (id: string) =>
+    read<StudyForm>(() => {
+      const form = db.forms.find((f) => f.id === id)
+      if (!form) throw new ApiError('Form not found.', 'not_found')
+      return clone(form)
+    }),
+
+  create: (input: { title: string; description: string; category: FormCategory }) =>
+    write(() => {
+      const record: StudyForm = {
+        id: nextId('FRM'),
+        title: input.title,
+        description: input.description,
+        category: input.category,
+        type: 'Unassigned',
+        status: 'draft',
+        sections: [],
+        createdAt: now(),
+        updatedAt: now(),
+        assignedStudyIds: [],
+      }
+      db.forms.unshift(record)
+      return clone(record)
+    }),
+
+  update: (id: string, patch: Partial<StudyForm>) =>
+    write(() => {
+      const i = db.forms.findIndex((f) => f.id === id)
+      if (i === -1) throw new ApiError('Form not found.', 'not_found')
+      db.forms[i] = { ...db.forms[i], ...patch, updatedAt: now() }
+      return clone(db.forms[i])
+    }),
+
+  publish: (id: string, startDate: string) =>
+    write(() => {
+      const form = db.forms.find((f) => f.id === id)
+      if (!form) throw new ApiError('Form not found.', 'not_found')
+      const questionCount = form.sections.reduce((n, s) => n + s.questions.length, 0)
+      if (questionCount === 0) {
+        throw new ApiError('Add at least one question before publishing.', 'invalid')
+      }
+      form.status = 'published'
+      form.publishedAt = now()
+      form.startDate = startDate
+      form.updatedAt = now()
+      return clone(form)
+    }),
+
+  setType: (id: string, type: FormType) =>
+    write(() => {
+      const form = db.forms.find((f) => f.id === id)
+      if (!form) throw new ApiError('Form not found.', 'not_found')
+      form.type = type
+      form.updatedAt = now()
+      return clone(form)
+    }),
+
+  /** Replaces the legacy slushbucket: the full assigned set is sent at once. */
+  setStudyAssignments: (studyId: string, category: FormCategory, formIds: string[]) =>
+    write(() => {
+      db.forms
+        .filter((f) => f.category === category)
+        .forEach((f) => {
+          const shouldHave = formIds.includes(f.id)
+          const has = f.assignedStudyIds.includes(studyId)
+          if (shouldHave && !has) f.assignedStudyIds.push(studyId)
+          if (!shouldHave && has) {
+            f.assignedStudyIds = f.assignedStudyIds.filter((s) => s !== studyId)
+          }
+        })
+      return clone(db.forms.filter((f) => f.assignedStudyIds.includes(studyId)))
+    }),
+
+  listForStudy: (studyId: string, category: FormCategory) =>
+    read<StudyForm[]>(
+      () =>
+        clone(
+          db.forms.filter((f) => f.category === category && f.assignedStudyIds.includes(studyId)),
+        ),
+      [],
+    ),
+}
+
+/* ---------------------------------------------------------- appointments */
+
+export const appointmentsApi = {
+  list: (studyId: string) =>
+    read<AppointmentTemplate[]>(
+      () => clone(db.appointments.filter((a) => a.studyId === studyId)),
+      [],
+    ),
+  create: (input: Omit<AppointmentTemplate, 'id' | 'createdAt'>) =>
+    write(() => {
+      const record: AppointmentTemplate = { ...input, id: nextId('APT'), createdAt: now() }
+      db.appointments.push(record)
+      return clone(record)
+    }),
+  update: (id: string, patch: Partial<AppointmentTemplate>) =>
+    write(() => {
+      const i = db.appointments.findIndex((a) => a.id === id)
+      if (i === -1) throw new ApiError('Appointment template not found.', 'not_found')
+      db.appointments[i] = { ...db.appointments[i], ...patch }
+      return clone(db.appointments[i])
+    }),
+  remove: (id: string) =>
+    write(() => {
+      db.appointments = db.appointments.filter((a) => a.id !== id)
+    }),
+}
+
+/* ---------------------------------------------------------- notifications */
+
+export const notificationsApi = {
+  list: (studyId: string) =>
+    read<NotificationGroup[]>(
+      () => clone(db.notificationGroups.filter((g) => g.studyId === studyId)),
+      [],
+    ),
+  createGroup: (input: { studyId: string; title: string; templateName: string }) =>
+    write(() => {
+      const record: NotificationGroup = {
+        ...input,
+        id: nextId('NG'),
+        questions: [],
+        createdAt: now(),
+      }
+      db.notificationGroups.push(record)
+      return clone(record)
+    }),
+  addQuestion: (groupId: string, question: Omit<NotificationQuestion, 'id'>) =>
+    write(() => {
+      const group = db.notificationGroups.find((g) => g.id === groupId)
+      if (!group) throw new ApiError('Question group not found.', 'not_found')
+      const record: NotificationQuestion = { ...question, id: nextId('NQ') }
+      group.questions.push(record)
+      return clone(record)
+    }),
+  removeQuestion: (groupId: string, questionId: string) =>
+    write(() => {
+      const group = db.notificationGroups.find((g) => g.id === groupId)
+      if (!group) return
+      group.questions = group.questions.filter((q) => q.id !== questionId)
+    }),
+  removeGroup: (groupId: string) =>
+    write(() => {
+      db.notificationGroups = db.notificationGroups.filter((g) => g.id !== groupId)
+    }),
+}
+
+/* ------------------------------------------------------ approved locations */
+
+export const locationsApi = {
+  list: (studyId: string) =>
+    read<ApprovedLocation[]>(
+      () => clone(db.approvedLocations.filter((l) => l.studyId === studyId)),
+      [],
+    ),
+  create: (input: Omit<ApprovedLocation, 'id'>) =>
+    write(() => {
+      if (
+        db.approvedLocations.some(
+          (l) => l.studyId === input.studyId && l.facilityName === input.facilityName,
+        )
+      ) {
+        throw new ApiError('That location is already approved for this study.', 'duplicate')
+      }
+      const record: ApprovedLocation = { ...input, id: nextId('AL') }
+      db.approvedLocations.push(record)
+      return clone(record)
+    }),
+  setEnabled: (id: string, enabled: boolean) =>
+    write(() => {
+      const record = db.approvedLocations.find((l) => l.id === id)
+      if (!record) throw new ApiError('Location not found.', 'not_found')
+      record.enabled = enabled
+      return clone(record)
+    }),
+  remove: (id: string) =>
+    write(() => {
+      db.approvedLocations = db.approvedLocations.filter((l) => l.id !== id)
+    }),
+}
+
+/* --------------------------------------------------------- public trials */
+
+export const publicApi = {
+  search: (query: string) =>
+    read<PublicTrial[]>(
+      () =>
+        clone(
+          db.publicTrials.filter((t) =>
+            matches([t.nctId, t.title, t.condition, t.sponsor, ...t.locations], query),
+          ),
+        ),
+      [],
+    ),
+
+  get: (nctId: string) =>
+    read<PublicTrial>(() => {
+      const trial = db.publicTrials.find((t) => t.nctId.toLowerCase() === nctId.toLowerCase())
+      if (!trial) throw new ApiError(`No trial found for ${nctId}.`, 'not_found')
+      return clone(trial)
+    }),
+
+  /** Pre-screening questions a participant answers before the sign-up form. */
+  prescreening: (nctId: string) =>
+    read<PrescreeningQuestion[]>(() => {
+      const trial = db.publicTrials.find((t) => t.nctId === nctId)
+      if (!trial) return []
+      return clone(
+        db.prescreening
+          .filter((q) => q.studyId === trial.studyId && q.group === 'primary')
+          .sort((a, b) => a.order - b.order),
+      )
+    }, []),
+
+  enroll: (payload: {
+    nctId: string
+    firstName: string
+    lastName: string
+    email: string
+    phone: string
+    city: string
+    zipcode: string
+    gender: string
+    dateOfBirth: string
+    smokingStatus: string
+    primaryLanguage: string
+    ethnicity: string[]
+    healthCondition: string
+    prescreeningAnswers: { question: string; answer: string }[]
+  }) =>
+    write(() => {
+      const trial = db.publicTrials.find((t) => t.nctId === payload.nctId)
+      if (!trial) throw new ApiError('This trial is no longer accepting sign-ups.', 'not_found')
+      if (db.subjects.some((s) => s.email.toLowerCase() === payload.email.toLowerCase())) {
+        throw new ApiError(
+          'This email address has already been used to sign up for a study.',
+          'duplicate',
+        )
+      }
+      const id = `PT${String(240000 + db.subjects.length + 1).padStart(6, '0')}`
+      const subject: Subject = {
+        id,
+        studyId: trial.studyId,
+        firstName: payload.firstName,
+        lastName: payload.lastName,
+        email: payload.email,
+        phone: payload.phone,
+        city: payload.city,
+        zipcode: payload.zipcode,
+        gender: payload.gender,
+        dateOfBirth: payload.dateOfBirth,
+        smokingStatus: payload.smokingStatus,
+        primaryLanguage: payload.primaryLanguage,
+        ethnicity: payload.ethnicity,
+        healthCondition: payload.healthCondition,
+        status: 'pending',
+        createdAt: now(),
+        prescreeningAnswers: payload.prescreeningAnswers,
+      }
+      db.subjects.unshift(subject)
+      return { participantId: id, studyId: trial.studyId }
+    }),
+}
+
+/* ---------------------------------------------------------- global search */
+
+export interface SearchHit {
+  id: string
+  kind: 'study' | 'participant' | 'form' | 'request'
+  title: string
+  subtitle: string
+  to: string
+}
+
+export const searchApi = {
+  /**
+   * One query across every record a site works with.
+   *
+   * Feeds the command palette. Deliberately server-shaped — a real backend
+   * would run this as a single indexed query rather than four scans.
+   */
+  global: (query: string, limit = 6) =>
+    read<SearchHit[]>(() => {
+      const q = query.trim().toLowerCase()
+      if (!q) return []
+      const hits: SearchHit[] = []
+
+      db.studies
+        .filter((s) => matches([s.id, s.nctId, s.title, s.condition, s.sponsor], q))
+        .slice(0, limit)
+        .forEach((s) =>
+          hits.push({
+            id: s.id,
+            kind: 'study',
+            title: s.title,
+            subtitle: `${s.id} · ${s.nctId} · ${s.condition}`,
+            to: `/studies/${s.id}`,
+          }),
+        )
+
+      db.subjects
+        .filter((s) => matches([s.id, s.firstName, s.lastName, s.email], q))
+        .slice(0, limit)
+        .forEach((s) =>
+          hits.push({
+            id: s.id,
+            kind: 'participant',
+            title: `${s.firstName} ${s.lastName}`,
+            subtitle: `${s.id} · ${s.city}`,
+            to: `/studies/${s.studyId}/participants`,
+          }),
+        )
+
+      db.forms
+        .filter((f) => matches([f.title, f.type, f.description], q))
+        .slice(0, limit)
+        .forEach((f) =>
+          hits.push({
+            id: f.id,
+            kind: 'form',
+            title: f.title,
+            subtitle: `${f.category === 'form' ? 'Form' : 'Survey'} · ${f.type}`,
+            to: `/${f.category === 'form' ? 'forms' : 'surveys'}/${f.id}`,
+          }),
+        )
+
+      db.studyRequests
+        .filter((r) => matches([r.id, r.nctId, r.title, r.sponsor], q))
+        .slice(0, limit)
+        .forEach((r) =>
+          hits.push({
+            id: r.id,
+            kind: 'request',
+            title: r.title,
+            subtitle: `${r.id} · ${r.sponsor}`,
+            to: `/requests/${r.id}`,
+          }),
+        )
+
+      return hits
+    }, []),
+}
+
+/* ------------------------------------------------------------- dashboard */
+
+export interface DashboardSummary {
+  studies: { active: number; promoted: number; archived: number }
+  enrollment: { target: number; enrolled: number }
+  pipeline: { pending: number; validated: number; recruited: number; rejected: number }
+  openRequests: StudyRequest[]
+  draftForms: StudyForm[]
+  recentSubjects: Subject[]
+}
+
+export const dashboardApi = {
+  get: () =>
+    read<DashboardSummary>(() => ({
+      studies: {
+        active: db.studies.filter((s) => s.status === 'active').length,
+        promoted: db.studies.filter((s) => s.status === 'promoted').length,
+        archived: db.studies.filter((s) => s.status === 'archived').length,
+      },
+      enrollment: {
+        target: db.studies.reduce((n, s) => n + s.enrollmentTarget, 0),
+        enrolled: db.studies.reduce((n, s) => n + s.enrolled, 0),
+      },
+      pipeline: {
+        pending: db.subjects.filter((s) => s.status === 'pending').length,
+        validated: db.subjects.filter((s) => s.status === 'validated').length,
+        recruited: db.subjects.filter((s) => s.status === 'recruited').length,
+        rejected: db.subjects.filter((s) => s.status === 'rejected').length,
+      },
+      openRequests: clone(
+        db.studyRequests.filter((r) => r.status === 'submitted' || r.status === 'under_review'),
+      ),
+      draftForms: clone(db.forms.filter((f) => f.status === 'draft')),
+      recentSubjects: clone(
+        [...db.subjects].sort((a, b) => b.createdAt.localeCompare(a.createdAt)).slice(0, 6),
+      ),
+    })),
+}
