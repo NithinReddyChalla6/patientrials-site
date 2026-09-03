@@ -25,9 +25,15 @@ await pool.query(`
     "siteId"       TEXT NOT NULL,
     active         BOOLEAN NOT NULL DEFAULT TRUE,
     "passwordHash" TEXT NOT NULL,
-    "invitedAt"    TEXT
+    "invitedAt"    TEXT,
+    "mustChangePassword" BOOLEAN NOT NULL DEFAULT FALSE
   );
 `)
+
+// Safe on databases created before the column existed.
+await pool.query(
+  'ALTER TABLE users ADD COLUMN IF NOT EXISTS "mustChangePassword" BOOLEAN NOT NULL DEFAULT FALSE',
+)
 
 await pool.query(`
   CREATE TABLE IF NOT EXISTS site_state (
@@ -90,8 +96,8 @@ export async function createUser({ firstName, lastName, email, role, siteId, pas
 
 export function toPublicUser(row) {
   if (!row) return null
-  const { passwordHash: _hash, active, ...rest } = row
-  return { ...rest, active: Boolean(active) }
+  const { passwordHash: _hash, active, mustChangePassword, ...rest } = row
+  return { ...rest, active: Boolean(active), mustChangePassword: Boolean(mustChangePassword) }
 }
 
 export async function getSiteState() {
@@ -105,4 +111,13 @@ export async function saveSiteState(data) {
      ON CONFLICT (id) DO UPDATE SET data = EXCLUDED.data`,
     [JSON.stringify(data)],
   )
+}
+
+/** Replace someone's password hash, and say whether they must change it next. */
+export async function setPassword(id, passwordHash, mustChangePassword) {
+  await pool.query(
+    'UPDATE users SET "passwordHash" = $1, "mustChangePassword" = $2 WHERE id = $3',
+    [passwordHash, Boolean(mustChangePassword), id],
+  )
+  return findUserById(id)
 }

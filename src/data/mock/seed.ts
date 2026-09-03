@@ -415,8 +415,8 @@ const CITIES: [string, string][] = [
   ['McKinney', '75069'], ['Richardson', '75080'],
 ]
 const STATUS_CYCLE: SubjectStatus[] = [
-  'pending', 'validated', 'pending', 'recruited', 'pending', 'rejected',
-  'validated', 'pending', 'recruited', 'pending',
+  'pending', 'validated', 'pending', 'recruited', 'prescreened', 'rejected',
+  'validated', 'pending', 'recruited', 'dropped', 'prescreened', 'pending',
 ]
 
 /** Deterministic so the demo is stable between reloads. */

@@ -17,6 +17,7 @@ import { useForm } from '@/lib/use-form'
 import { all, email as emailRule, required } from '@/lib/validators'
 import { useAuth } from './auth-context'
 import { DEMO_ACCOUNTS } from './demo-accounts'
+import { AuthBackground } from './auth-background'
 
 /**
  * Where a fresh sign-in lands. A site administrator is taken straight to the
@@ -96,7 +97,9 @@ export function LoginPage() {
   })
 
   return (
-    <div className="min-h-dvh bg-background">
+    <div className="relative min-h-dvh overflow-hidden bg-[#f6fafd]">
+      <AuthBackground />
+      <div className="relative z-10">
       <a href="#signin" className="skip-link">
         Skip to sign in
       </a>
@@ -256,6 +259,7 @@ export function LoginPage() {
             </div>
           </div>
         </section>
+      </div>
       </div>
     </div>
   )

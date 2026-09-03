@@ -1,7 +1,7 @@
 import * as React from 'react'
 import { CircleSlash, ThumbsUp, UserCheck, Users } from 'lucide-react'
 import { subjectsApi } from '@/data/api'
-import type { Subject, SubjectStatus } from '@/data/types'
+import type { Subject, SubjectStatus, TriageAction } from '@/data/types'
 import { useAsync } from '@/lib/use-async'
 import { cn } from '@/lib/cn'
 import { formatDate, formatRelative } from '@/lib/format'
@@ -27,8 +27,10 @@ type Filter = SubjectStatus | 'all'
 const FILTERS: { value: Filter; label: string }[] = [
   { value: 'pending', label: 'Awaiting review' },
   { value: 'validated', label: 'Validated' },
+  { value: 'prescreened', label: 'Pre-screened' },
   { value: 'recruited', label: 'Recruited' },
   { value: 'rejected', label: 'Not eligible' },
+  { value: 'dropped', label: 'Dropped' },
   { value: 'all', label: 'All' },
 ]
 
@@ -49,10 +51,7 @@ function Shortcut({ keys, label }: { keys: string; label: string }) {
 const mismatches = (subject: Subject) =>
   subject.prescreeningAnswers.filter((a) => a.desired && a.answer !== a.desired).length
 
-const ACTION_COPY: Record<
-  Exclude<SubjectStatus, 'pending'>,
-  { verb: string; past: string; note?: string }
-> = {
+const ACTION_COPY: Record<TriageAction, { verb: string; past: string; note?: string }> = {
   validated: { verb: 'Validate', past: 'validated' },
   recruited: {
     verb: 'Recruit',
@@ -90,7 +89,7 @@ export function ParticipantsTab() {
   const [openSubject, setOpenSubject] = React.useState<Subject | null>(null)
   const [busy, setBusy] = React.useState(false)
   const [confirm, setConfirm] = React.useState<{
-    status: Exclude<SubjectStatus, 'pending'>
+    status: TriageAction
     rows: Subject[]
     clear: () => void
   } | null>(null)
@@ -118,7 +117,7 @@ export function ParticipantsTab() {
     [study.id, debounced, filter, page],
   )
 
-  async function apply(status: Exclude<SubjectStatus, 'pending'>, rows: Subject[], clear: () => void) {
+  async function apply(status: TriageAction, rows: Subject[], clear: () => void) {
     setBusy(true)
     try {
       const changed = await subjectsApi.setStatusMany(
@@ -185,7 +184,7 @@ export function ParticipantsTab() {
             ? [activeRow]
             : []
 
-      const decide = (status: Exclude<SubjectStatus, 'pending'>) => {
+      const decide = (status: TriageAction) => {
         if (targets.length === 0) return
         e.preventDefault()
         setConfirm({ status, rows: targets, clear: () => setSelectedKeys([]) })
@@ -463,10 +462,7 @@ export function ParticipantsTab() {
             subject={openSubject}
             canTriage={canTriage}
             busy={busy}
-            onAction={(status) =>
-              status !== 'pending' &&
-              apply(status, [openSubject], () => setOpenSubject(null))
-            }
+            onAction={(status) => apply(status, [openSubject], () => setOpenSubject(null))}
           />
         )}
       </SidePanel>

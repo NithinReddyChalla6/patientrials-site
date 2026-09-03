@@ -125,6 +125,43 @@ const db = {
   publicTrials: clone(seed.publicTrials),
 }
 
+/**
+ * Passwords an administrator has issued but the holder has not yet replaced.
+ *
+ * Deliberately module state and never part of `db`: `db` is persisted wholesale,
+ * and a plaintext password must not be written to storage. A real backend stores
+ * only a hash; this stands in for that one call.
+ */
+const issuedPasswords = new Map<string, string>()
+
+const PW_LOWER = 'abcdefghijkmnopqrstuvwxyz'
+const PW_UPPER = 'ABCDEFGHJKLMNPQRSTUVWXYZ'
+const PW_DIGITS = '23456789'
+const pick = (set: string) => set[Math.floor(Math.random() * set.length)]
+
+/** The first rule a password fails, or undefined when it passes them all. */
+export function passwordProblems(value: string): string | undefined {
+  if (value.length < 8) return 'Password must be at least 8 characters.'
+  if (value.length > 40) return 'Password must be no more than 40 characters.'
+  if (!/[a-z]/.test(value)) return 'Password must include a lowercase letter.'
+  if (!/[A-Z]/.test(value)) return 'Password must include an uppercase letter.'
+  if (!/[0-9]/.test(value)) return 'Password must include a number.'
+  return undefined
+}
+
+/** A password that already satisfies every rule we ask users to meet. */
+function generatePassword(): string {
+  const all = PW_LOWER + PW_UPPER + PW_DIGITS
+  const chars = [pick(PW_LOWER), pick(PW_UPPER), pick(PW_DIGITS)]
+  while (chars.length < 10) chars.push(pick(all))
+  // Shuffle so the guaranteed characters are not always in the same position.
+  for (let i = chars.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1))
+    ;[chars[i], chars[j]] = [chars[j], chars[i]]
+  }
+  return chars.join('')
+}
+
 let idCounter = 9000
 const nextId = (prefix: string) => `${prefix}-${(idCounter += 1)}`
 const now = () => new Date().toISOString()
@@ -222,15 +259,68 @@ export interface Session {
  * (Vercel) with no backend, or a page served over HTTPS that cannot reach the
  * local API. Any seeded account signs in with a 6+ character password.
  */
+/** The stored bearer token, when there is a live session. */
+const SESSION_STORAGE_KEY = 'patientrials.site.session'
+function authToken(): string | undefined {
+  try {
+    const raw = sessionStorage.getItem(SESSION_STORAGE_KEY)
+    return raw ? (JSON.parse(raw) as Session).token : undefined
+  } catch {
+    return undefined
+  }
+}
+
 function demoLogin(email: string, password: string): Session {
   const user = db.users.find((u) => u.email.toLowerCase() === email.trim().toLowerCase())
   if (!user || password.length < 6) {
+    throw new ApiError('That email and password combination was not recognised.', 'invalid')
+  }
+  // Once an administrator has issued a password, only that password works —
+  // otherwise the forced change below could be walked straight past.
+  const issued = issuedPasswords.get(user.id)
+  if (issued && password !== issued) {
     throw new ApiError('That email and password combination was not recognised.', 'invalid')
   }
   if (!user.active) {
     throw new ApiError('This account is inactive. Ask your site administrator to re-enable it.', 'invalid')
   }
   return { user, siteId: user.siteId }
+}
+
+/**
+ * A new site administrator's registration sets up their site record: the name,
+ * time zone, country and administrator they entered on the sign-up form become
+ * the site they land on after signing in, with a fresh address to complete
+ * during onboarding. This is a single-site demo, so it updates the one shared
+ * site; other roles (nurses, participants) leave the site untouched.
+ */
+async function applyRegistrationToSite(input: {
+  role: Role
+  firstName: string
+  lastName: string
+  siteName?: string
+  country?: string
+  timeZone?: string
+}): Promise<void> {
+  if (input.role !== 'site_administrator') return
+  const name = input.siteName?.trim()
+  const timeZone = input.timeZone?.trim()
+  const country = input.country?.trim()
+  db.site = {
+    ...db.site,
+    ...(name ? { name } : {}),
+    adminName: `${input.firstName} ${input.lastName}`.trim(),
+    briefDescription: '',
+    ...(timeZone ? { timeZone } : {}),
+    address: {
+      street: '',
+      city: '',
+      state: '',
+      zip: '',
+      country: country || db.site.address.country,
+    },
+  }
+  await persistState()
 }
 
 export const auth = {
@@ -266,6 +356,12 @@ export const auth = {
     password: string
     role: Role
     siteId?: string
+    /** Site details captured on the sign-up form — the name, country and time
+     *  zone the new administrator entered, so their site reflects them on the
+     *  onboarding screen after they sign in. */
+    siteName?: string
+    country?: string
+    timeZone?: string
   }): Promise<void> {
     let res: Response
     try {
@@ -279,6 +375,7 @@ export const auth = {
       if (db.users.some((u) => u.email.toLowerCase() === input.email.toLowerCase())) {
         throw new ApiError('An account already exists for this email address.', 'duplicate')
       }
+      await applyRegistrationToSite(input)
       return
     }
     if (!res.ok) {
@@ -288,6 +385,50 @@ export const auth = {
         res.status === 409 ? 'duplicate' : undefined,
       )
     }
+    await applyRegistrationToSite(input)
+  },
+
+  /**
+   * Choose a new password, replacing one an administrator issued.
+   *
+   * Enforces the same rules the form states, then clears the flag so the
+   * account can be used normally.
+   */
+  async changePassword(userId: string, currentPassword: string, newPassword: string) {
+    const token = authToken()
+    if (token) {
+      let res: Response | undefined
+      try {
+        res = await fetch(`${AUTH_API}/api/auth/change-password`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+          body: JSON.stringify({ currentPassword, newPassword }),
+        })
+      } catch {
+        res = undefined // no server reachable — fall through to demo mode
+      }
+      if (res) {
+        const body = (await res.json().catch(() => ({}))) as { user?: User; error?: string }
+        if (!res.ok) throw new ApiError(body.error ?? 'We could not change your password.', 'invalid')
+        const local = db.users.find((u) => u.id === userId)
+        if (local) local.mustChangePassword = false
+        issuedPasswords.delete(userId)
+        return body.user as User
+      }
+    }
+    return write(() => {
+      const user = db.users.find((u) => u.id === userId)
+      if (!user) throw new ApiError('Account not found.', 'not_found')
+      const issued = issuedPasswords.get(user.id)
+      if (issued && currentPassword !== issued) {
+        throw new ApiError('That current password is not right.', 'invalid')
+      }
+      const failed = passwordProblems(newPassword)
+      if (failed) throw new ApiError(failed, 'invalid')
+      issuedPasswords.delete(user.id)
+      user.mustChangePassword = false
+      return clone(user)
+    })
   },
 
   /** Demo affordance: sign in as any seeded user to see role-gated navigation. */
@@ -309,7 +450,11 @@ const SITE_STATE_URL = `${AUTH_API}/api/site-state`
  */
 export async function hydrateSiteState(): Promise<void> {
   try {
-    const res = await fetch(SITE_STATE_URL)
+    const token = authToken()
+    // The store is private to a signed-in site. Before sign-in there is nothing
+    // to load, so the app opens on the seed and hydrates once you are in.
+    if (!token) return
+    const res = await fetch(SITE_STATE_URL, { headers: { Authorization: `Bearer ${token}` } })
     if (!res.ok) return
     const data = await res.json()
     if (data && typeof data === 'object') {
@@ -329,9 +474,11 @@ export async function hydrateSiteState(): Promise<void> {
 /** Save the whole store. Best-effort — the in-memory change already applied. */
 async function persistState(): Promise<void> {
   try {
+    const token = authToken()
+    if (!token) return
     await fetch(SITE_STATE_URL, {
       method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
       body: JSON.stringify(db),
     })
   } catch {
@@ -460,12 +607,48 @@ export const siteApi = {
     writePersist(() => {
       db.users = db.users.filter((u) => u.id !== id)
     }),
-  resetCollaboratorPassword: (id: string) =>
-    write(() => {
+  /**
+   * Issue a new password for a collaborator.
+   *
+   * There is no mail server in this build, so a reset that only promised an
+   * email would leave the account unreachable. The administrator is handed the
+   * password to pass on, and the account is flagged so its holder must choose
+   * their own before they can do anything else.
+   */
+  resetCollaboratorPassword: async (id: string) => {
+    const token = authToken()
+    if (token) {
+      let res: Response | undefined
+      try {
+        res = await fetch(`${AUTH_API}/api/auth/reset-password`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+          body: JSON.stringify({ userId: id }),
+        })
+      } catch {
+        res = undefined // no server reachable — fall through to demo mode
+      }
+      if (res) {
+        const body = (await res.json().catch(() => ({}))) as {
+          password?: string
+          user?: User
+          error?: string
+        }
+        if (!res.ok) throw new ApiError(body.error ?? 'We could not reset the password.')
+        const local = db.users.find((u) => u.id === id)
+        if (local) local.mustChangePassword = true
+        return { email: body.user?.email ?? local?.email ?? '', password: body.password ?? '' }
+      }
+    }
+    return write(() => {
       const user = db.users.find((u) => u.id === id)
       if (!user) throw new ApiError('Collaborator not found.', 'not_found')
-      return user.email
-    }),
+      const password = generatePassword()
+      issuedPasswords.set(user.id, password)
+      user.mustChangePassword = true
+      return { email: user.email, password }
+    })
+  },
 
   /**
    * Everything the onboarding wizard needs, in one read.
@@ -498,12 +681,18 @@ export interface StudyQuery {
   status?: 'all' | 'promoted' | 'active' | 'archived'
   page?: number
   pageSize?: number
+  /**
+   * Limit to the studies one investigator leads. A Principal Investigator only
+   * ever sees their own studies, so the console passes their id here.
+   */
+  investigatorId?: string
 }
 
 export const studiesApi = {
-  list: ({ query = '', status = 'all', page = 1, pageSize = 12 }: StudyQuery = {}) =>
+  list: ({ query = '', status = 'all', page = 1, pageSize = 12, investigatorId }: StudyQuery = {}) =>
     read<Paged<StudyWithCounts>>(() => {
       const filtered = db.studies
+        .filter((s) => !investigatorId || s.principalInvestigatorId === investigatorId)
         .filter((s) => status === 'all' || s.status === status)
         .filter((s) => matches([s.id, s.nctId, s.title, s.condition, s.sponsor], query))
         .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
@@ -512,21 +701,28 @@ export const studiesApi = {
           return {
             ...study,
             // "Prospects" are everyone still in screening; "subjects" are enrolled.
-            prospects: people.filter((s) => s.status === 'pending' || s.status === 'validated')
-              .length,
+            prospects: people.filter(
+              (s) =>
+                s.status === 'pending' || s.status === 'validated' || s.status === 'prescreened',
+            ).length,
             subjects: people.filter((s) => s.status === 'recruited').length,
           }
         })
       return paginate(clone(filtered), page, pageSize)
     }, emptyPage<StudyWithCounts>()),
 
-  counts: () =>
-    read(() => ({
-      promoted: db.studies.filter((s) => s.status === 'promoted').length,
-      active: db.studies.filter((s) => s.status === 'active').length,
-      archived: db.studies.filter((s) => s.status === 'archived').length,
-      all: db.studies.length,
-    })),
+  counts: (investigatorId?: string) =>
+    read(() => {
+      const mine = db.studies.filter(
+        (s) => !investigatorId || s.principalInvestigatorId === investigatorId,
+      )
+      return {
+        promoted: mine.filter((s) => s.status === 'promoted').length,
+        active: mine.filter((s) => s.status === 'active').length,
+        archived: mine.filter((s) => s.status === 'archived').length,
+        all: mine.length,
+      }
+    }),
 
   get: (id: string) =>
     read<Study>(() => {
@@ -712,8 +908,10 @@ export const subjectsApi = {
         all: all.length,
         pending: all.filter((s) => s.status === 'pending').length,
         validated: all.filter((s) => s.status === 'validated').length,
+        prescreened: all.filter((s) => s.status === 'prescreened').length,
         recruited: all.filter((s) => s.status === 'recruited').length,
         rejected: all.filter((s) => s.status === 'rejected').length,
+        dropped: all.filter((s) => s.status === 'dropped').length,
       }
     }),
 
@@ -1182,8 +1380,10 @@ export const dashboardApi = {
       pipeline: {
         pending: db.subjects.filter((s) => s.status === 'pending').length,
         validated: db.subjects.filter((s) => s.status === 'validated').length,
+        prescreened: db.subjects.filter((s) => s.status === 'prescreened').length,
         recruited: db.subjects.filter((s) => s.status === 'recruited').length,
         rejected: db.subjects.filter((s) => s.status === 'rejected').length,
+        dropped: db.subjects.filter((s) => s.status === 'dropped').length,
       },
       openRequests: clone(
         db.studyRequests.filter((r) => r.status === 'submitted' || r.status === 'under_review'),

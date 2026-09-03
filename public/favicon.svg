@@ -1,7 +1,0 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">
-  <rect width="32" height="32" rx="7" fill="#0369A1"/>
-  <text x="16" y="17.5" text-anchor="middle" fill="#ffffff"
-        font-family="'Segoe UI', system-ui, Arial, sans-serif" font-size="15" font-weight="800"
-        letter-spacing="-0.5">pa</text>
-  <path d="M8.5 23 Q16 27.5 23.5 23" fill="none" stroke="#F7912E" stroke-width="2.4" stroke-linecap="round"/>
-</svg>

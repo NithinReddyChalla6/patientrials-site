@@ -104,7 +104,7 @@ function IrbForm({
       city: editing?.address.city ?? '',
       state: editing?.address.state ?? '',
       zip: editing?.address.zip ?? '',
-      country: editing?.address.country ?? 'United States of America',
+      country: editing?.address.country ?? '',
     },
     rules: {
       name: required('IRB name'),
@@ -167,7 +167,7 @@ function IrbForm({
           {(aria) => (
             <Input
               {...aria}
-              value={site.number}
+              value={site.name}
               readOnly
               className="bg-sunken text-muted-foreground"
             />

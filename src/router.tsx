@@ -30,6 +30,9 @@ const RegistrationSubmittedPage = lazy(() =>
 const WorkspaceHub = lazy(() =>
   import('@/features/auth/workspace-hub').then((m) => ({ default: m.WorkspaceHub })),
 )
+const ChangePasswordPage = lazy(() =>
+  import('@/features/auth/change-password-page').then((m) => ({ default: m.ChangePasswordPage })),
+)
 const OnboardingWizard = lazy(() =>
   import('@/features/onboarding/wizard').then((m) => ({ default: m.OnboardingWizard })),
 )
@@ -138,6 +141,7 @@ export function AppRoutes() {
         </Route>
 
         <Route element={<ProtectedRoute />}>
+          <Route path="/change-password" element={<ChangePasswordPage />} />
           <Route path="/hub" element={<WorkspaceHub />} />
           <Route path="/onboarding" element={<OnboardingWizard />} />
 

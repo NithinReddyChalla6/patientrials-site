@@ -75,14 +75,50 @@ export const TIME_ZONES = [
   '(GMT-06:00) Central Time',
   '(GMT-05:00) Eastern Time',
   '(GMT-04:00) Atlantic Time',
+  '(GMT-03:00) Brasília Time',
   '(GMT+00:00) Greenwich Mean Time',
   '(GMT+01:00) Central European Time',
   '(GMT+02:00) Eastern European Time',
+  '(GMT+02:00) South Africa Standard Time',
   '(GMT+05:30) India Standard Time',
   '(GMT+08:00) Singapore Standard Time',
   '(GMT+09:00) Japan Standard Time',
+  '(GMT+09:00) Korea Standard Time',
   '(GMT+10:00) Australian Eastern Time',
+  '(GMT+12:00) New Zealand Time',
 ]
+
+/**
+ * The time zone a country most commonly uses, so selecting a country on the
+ * sign-up form can pre-fill the time zone. Countries that span several zones
+ * (US, Canada, Australia) get their most populous one as a starting point — the
+ * field stays editable so a site can correct it. Every value is a member of
+ * `TIME_ZONES`.
+ */
+export const COUNTRY_TIME_ZONE: Record<string, string> = {
+  'United States of America': '(GMT-05:00) Eastern Time',
+  Canada: '(GMT-05:00) Eastern Time',
+  'United Kingdom': '(GMT+00:00) Greenwich Mean Time',
+  Ireland: '(GMT+00:00) Greenwich Mean Time',
+  Germany: '(GMT+01:00) Central European Time',
+  France: '(GMT+01:00) Central European Time',
+  Spain: '(GMT+01:00) Central European Time',
+  Italy: '(GMT+01:00) Central European Time',
+  Netherlands: '(GMT+01:00) Central European Time',
+  Belgium: '(GMT+01:00) Central European Time',
+  Sweden: '(GMT+01:00) Central European Time',
+  Denmark: '(GMT+01:00) Central European Time',
+  Poland: '(GMT+01:00) Central European Time',
+  Australia: '(GMT+10:00) Australian Eastern Time',
+  'New Zealand': '(GMT+12:00) New Zealand Time',
+  India: '(GMT+05:30) India Standard Time',
+  Japan: '(GMT+09:00) Japan Standard Time',
+  'South Korea': '(GMT+09:00) Korea Standard Time',
+  Singapore: '(GMT+08:00) Singapore Standard Time',
+  Brazil: '(GMT-03:00) Brasília Time',
+  Mexico: '(GMT-06:00) Central Time',
+  'South Africa': '(GMT+02:00) South Africa Standard Time',
+}
 
 export const IRB_MEETING_FREQUENCIES = [
   'Weekly',

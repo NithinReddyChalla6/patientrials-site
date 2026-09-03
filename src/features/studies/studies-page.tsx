@@ -42,7 +42,9 @@ const PAGE_SIZE = 25
 export function StudiesPage() {
   const [params, setParams] = useSearchParams()
   const navigate = useNavigate()
-  const { can } = useAuth()
+  const { can, user, role } = useAuth()
+  // A Principal Investigator only ever sees the studies they lead.
+  const investigatorId = role === 'principal_investigator' ? user?.id : undefined
   const toast = useToast()
 
   const status = (params.get('status') as Filter | null) ?? 'all'
@@ -69,11 +71,11 @@ export function StudiesPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [searchValue])
 
-  const counts = useAsync(() => studiesApi.counts(), [])
+  const counts = useAsync(() => studiesApi.counts(investigatorId), [investigatorId])
   const people = useAsync(() => siteApi.listCollaborators(), [])
   const studies = useAsync(
-    () => studiesApi.list({ query, status, page, pageSize: PAGE_SIZE }),
-    [query, status, page],
+    () => studiesApi.list({ query, status, page, pageSize: PAGE_SIZE, investigatorId }),
+    [query, status, page, investigatorId],
   )
 
   const patch = (changes: Record<string, string | null>) =>

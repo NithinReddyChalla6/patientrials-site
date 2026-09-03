@@ -8,7 +8,7 @@ import { useAuth } from './auth-context'
  * signed-in user.
  */
 export function ProtectedRoute() {
-  const { session, ready } = useAuth()
+  const { session, ready, user } = useAuth()
   const location = useLocation()
 
   if (!ready) {
@@ -21,6 +21,12 @@ export function ProtectedRoute() {
 
   if (!session) {
     return <Navigate to="/login" replace state={{ from: location.pathname }} />
+  }
+
+  // An administrator-issued password gets you exactly one destination: the
+  // screen where you replace it.
+  if (user?.mustChangePassword && location.pathname !== '/change-password') {
+    return <Navigate to="/change-password" replace />
   }
 
   return <Outlet />

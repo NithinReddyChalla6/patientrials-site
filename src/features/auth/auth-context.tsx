@@ -1,5 +1,5 @@
 import * as React from 'react'
-import { auth, type Session } from '@/data/api'
+import { auth, hydrateSiteState, type Session } from '@/data/api'
 import type { Role, User } from '@/data/types'
 import { can, type Permission } from './roles'
 
@@ -11,6 +11,8 @@ interface AuthContextValue {
   signOut: () => void
   /** Demo affordance: view the console as another role without re-authenticating. */
   switchRole: (role: Role) => void
+  /** Apply changes to the signed-in user, e.g. after they choose a password. */
+  updateUser: (changes: Partial<User>) => void
   can: (permission: Permission) => boolean
   ready: boolean
 }
@@ -55,12 +57,19 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       signIn: async (email, password) => {
         const next = await auth.login(email, password)
         persist(next)
+        // The site's data is only readable once signed in, so load it now
+        // rather than at boot, and before the first screen reads from it.
+        await hydrateSiteState()
         return next
       },
       signOut: () => persist(null),
       switchRole: (role) => {
         if (!session) return
         persist({ ...session, user: { ...session.user, role } })
+      },
+      updateUser: (changes) => {
+        if (!session) return
+        persist({ ...session, user: { ...session.user, ...changes } })
       },
       can: (permission) => can(session?.user.role, permission),
     }),

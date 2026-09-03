@@ -266,13 +266,19 @@ function StepperRail({
           const Tag = reachable ? 'button' : 'div'
           return (
             <li key={step.id} className="relative">
+              {isCurrent && (
+                <span
+                  aria-hidden="true"
+                  className="absolute inset-y-1.5 left-0 w-0.5 rounded-full bg-brand"
+                />
+              )}
               <Tag
                 {...(reachable ? { type: 'button' as const, onClick: () => onSelect(i) } : {})}
                 aria-current={isCurrent ? 'step' : undefined}
                 className={cn(
                   'flex w-full items-start gap-3 rounded-lg px-2 py-2 text-left transition-colors',
                   reachable && 'cursor-pointer hover:bg-secondary/60',
-                  isCurrent && 'bg-accent/50',
+                  isCurrent && 'bg-brand/10',
                 )}
               >
                 <span
@@ -290,8 +296,12 @@ function StepperRail({
                 <span className="min-w-0 pt-0.5">
                   <span
                     className={cn(
-                      'block text-sm font-medium',
-                      isCurrent || isDone ? 'text-foreground' : 'text-muted-foreground',
+                      'block text-sm',
+                      isCurrent
+                        ? 'font-semibold text-brand'
+                        : isDone
+                          ? 'font-medium text-foreground'
+                          : 'font-medium text-muted-foreground',
                     )}
                   >
                     {step.label}

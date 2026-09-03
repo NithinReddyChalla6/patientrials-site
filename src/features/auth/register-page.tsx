@@ -12,7 +12,7 @@ import { FormSection, FullWidth } from '@/components/patterns/form-section'
 import { ErrorSummary } from '@/components/patterns/error-summary'
 import { useForm } from '@/lib/use-form'
 import { all, email as emailRule, matches, password as passwordRule, required } from '@/lib/validators'
-import { COUNTRIES, TIME_ZONES } from '@/data/reference'
+import { COUNTRIES, COUNTRY_TIME_ZONE, TIME_ZONES } from '@/data/reference'
 import { auth } from '@/data/api'
 import type { Persona, Role } from '@/data/types'
 import { LegalAgreementDialog } from './legal-agreement'
@@ -82,7 +82,7 @@ export function RegisterPage() {
 
   const form = useForm({
     initialValues: {
-      country: 'United States of America',
+      country: '',
       timeZone: '',
       orgName: '',
       firstName: '',
@@ -126,6 +126,9 @@ export function RegisterPage() {
         lastName: form.values.lastName,
         password: form.values.password,
         role: PERSONA_ROLE[persona] ?? 'site_administrator',
+        siteName: form.values.orgName,
+        country: form.values.country,
+        timeZone: form.values.timeZone,
       })
       setAgreementOpen(false)
       navigate('/register/submitted', {
@@ -254,8 +257,16 @@ export function RegisterPage() {
                   options={COUNTRIES.map((c) => ({ value: c, label: c }))}
                   value={form.values.country}
                   onChange={(value) => {
-                    form.setValue('country', value ?? '')
+                    const next = value ?? ''
+                    form.setValue('country', next)
                     form.blur('country')
+                    // Pre-fill the time zone from the chosen country so it does
+                    // not have to be set separately; it stays editable below.
+                    const tz = COUNTRY_TIME_ZONE[next]
+                    if (tz) {
+                      form.setValue('timeZone', tz)
+                      form.blur('timeZone')
+                    }
                   }}
                   placeholder="Select a country"
                   searchPlaceholder="Search countries"
@@ -263,13 +274,19 @@ export function RegisterPage() {
               )}
             </FormField>
 
-            <FormField id="timeZone" label={LABELS.timeZone} error={form.errors.timeZone} required>
+            <FormField
+              id="timeZone"
+              label={LABELS.timeZone}
+              hint="Filled in from your country — change it if your site uses a different zone."
+              error={form.errors.timeZone}
+              required
+            >
               {(aria) => (
                 <Select
                   {...aria}
                   {...form.field('timeZone')}
                   options={TIME_ZONES}
-                  placeholder="Select a time zone"
+                  placeholder="Select your country first"
                 />
               )}
             </FormField>

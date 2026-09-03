@@ -1,5 +1,5 @@
 import * as React from 'react'
-import { KeyRound, UserPlus, Users } from 'lucide-react'
+import { Check, Copy, KeyRound, UserPlus, Users } from 'lucide-react'
 import { siteApi, ApiError } from '@/data/api'
 import { ROLE_LABELS, type Role, type User } from '@/data/types'
 import { useForm } from '@/lib/use-form'
@@ -15,6 +15,15 @@ import { useToast } from '@/components/ui/toast'
 import { FormField } from '@/components/patterns/form-field'
 import { FormSection } from '@/components/patterns/form-section'
 import { EmptyState } from '@/components/patterns/empty-state'
+import {
+  Dialog,
+  DialogBody,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog'
 import { ConfirmDialog } from '@/components/patterns/confirm-dialog'
 import { ActiveDot } from '@/components/patterns/status-badge'
 import { useAuth } from '@/features/auth/auth-context'
@@ -44,6 +53,10 @@ export function TeamManager({
   const { user: currentUser } = useAuth()
   const [serverError, setServerError] = React.useState<string>()
   const [resetTarget, setResetTarget] = React.useState<User | null>(null)
+  // The password just issued, held only long enough for the administrator to
+  // pass it on. Never stored.
+  const [issued, setIssued] = React.useState<{ name: string; password: string } | null>(null)
+  const [copied, setCopied] = React.useState(false)
   const [busyId, setBusyId] = React.useState<string>()
 
   const form = useForm({
@@ -94,14 +107,15 @@ export function TeamManager({
     if (!resetTarget) return
     setBusyId(resetTarget.id)
     try {
-      await siteApi.resetCollaboratorPassword(resetTarget.id)
-      toast.success(
-        'Password reset sent',
-        `${resetTarget.firstName} will get an email at ${resetTarget.email}.`,
-      )
+      const result = await siteApi.resetCollaboratorPassword(resetTarget.id)
+      setIssued({
+        name: `${resetTarget.firstName} ${resetTarget.lastName}`,
+        password: result.password,
+      })
+      setCopied(false)
       setResetTarget(null)
     } catch {
-      toast.error('We could not send the reset', 'Please try again.')
+      toast.error('We could not reset the password', 'Please try again.')
     } finally {
       setBusyId(undefined)
     }
@@ -268,16 +282,56 @@ export function TeamManager({
       <ConfirmDialog
         open={Boolean(resetTarget)}
         onOpenChange={(open) => !open && setResetTarget(null)}
-        title="Send a password reset?"
+        title="Reset this password?"
         description={
           resetTarget
-            ? `${resetTarget.firstName} ${resetTarget.lastName} will receive an email at ${resetTarget.email} with a link to choose a new password. Their current password stops working straight away.`
+            ? `A new password will be issued for ${resetTarget.firstName} ${resetTarget.lastName}. Their current password stops working straight away, and they will choose their own the next time they sign in.`
             : ''
         }
-        confirmLabel="Send reset email"
+        confirmLabel="Reset password"
         loading={Boolean(busyId)}
         onConfirm={confirmReset}
       />
+
+      <Dialog open={Boolean(issued)} onOpenChange={(open) => !open && setIssued(null)}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>New password for {issued?.name}</DialogTitle>
+            <DialogDescription>
+              Pass this on yourself. It is shown once and cannot be looked up again. They will be
+              asked to choose their own password the next time they sign in.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogBody>
+            <div className="flex items-center gap-3 rounded-lg border border-border bg-sunken p-3">
+              <code className="flex-1 select-all font-mono text-sm tracking-wide text-foreground">
+                {issued?.password}
+              </code>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={async () => {
+                  if (!issued) return
+                  try {
+                    await navigator.clipboard.writeText(issued.password)
+                    setCopied(true)
+                  } catch {
+                    setCopied(false)
+                  }
+                }}
+              >
+                {copied ? <Check aria-hidden="true" /> : <Copy aria-hidden="true" />}
+                {copied ? 'Copied' : 'Copy'}
+              </Button>
+            </div>
+          </DialogBody>
+          <DialogFooter>
+            <Button variant="brand" onClick={() => setIssued(null)}>
+              Done
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }

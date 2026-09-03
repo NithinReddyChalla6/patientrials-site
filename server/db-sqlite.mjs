@@ -27,9 +27,18 @@ db.exec(`
     siteId       TEXT NOT NULL,
     active       INTEGER NOT NULL DEFAULT 1,
     passwordHash TEXT NOT NULL,
-    invitedAt    TEXT
+    invitedAt    TEXT,
+    mustChangePassword INTEGER NOT NULL DEFAULT 0
   );
 `)
+
+// Existing databases predate the column. SQLite has no ADD COLUMN IF NOT EXISTS,
+// so adding it twice is expected to throw and is safe to ignore.
+try {
+  db.exec('ALTER TABLE users ADD COLUMN mustChangePassword INTEGER NOT NULL DEFAULT 0')
+} catch {
+  // already present
+}
 
 db.exec(`
   CREATE TABLE IF NOT EXISTS site_state (
@@ -97,8 +106,8 @@ export function createUser({ firstName, lastName, email, role, siteId, password 
 
 export function toPublicUser(row) {
   if (!row) return null
-  const { passwordHash: _hash, active, ...rest } = row
-  return { ...rest, active: Boolean(active) }
+  const { passwordHash: _hash, active, mustChangePassword, ...rest } = row
+  return { ...rest, active: Boolean(active), mustChangePassword: Boolean(mustChangePassword) }
 }
 
 export function getSiteState() {
@@ -111,4 +120,14 @@ export function saveSiteState(data) {
     `INSERT INTO site_state (id, data) VALUES (1, ?)
      ON CONFLICT(id) DO UPDATE SET data = excluded.data`,
   ).run(JSON.stringify(data))
+}
+
+/** Replace someone's password hash, and say whether they must change it next. */
+export function setPassword(id, passwordHash, mustChangePassword) {
+  db.prepare('UPDATE users SET passwordHash = ?, mustChangePassword = ? WHERE id = ?').run(
+    passwordHash,
+    mustChangePassword ? 1 : 0,
+    id,
+  )
+  return findUserById(id)
 }

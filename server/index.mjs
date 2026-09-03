@@ -11,6 +11,7 @@ import {
   toPublicUser,
   getSiteState,
   saveSiteState,
+  setPassword,
 } from './db.mjs'
 
 /**
@@ -36,6 +37,48 @@ console.log(
     seeded.seeded ? `seeded ${seeded.count} demo accounts` : `${seeded.count} existing accounts`
   }`,
 )
+
+/** The signed-in user for a request, or null when the token is missing or bad. */
+async function currentUser(req) {
+  const header = req.headers.authorization || ''
+  const token = header.startsWith('Bearer ') ? header.slice(7) : null
+  if (!token) return null
+  try {
+    const { sub } = jwt.verify(token, JWT_SECRET)
+    return await findUserById(sub)
+  } catch {
+    return null
+  }
+}
+
+/** The first rule a password fails, or null when it passes them all. */
+function passwordProblem(value) {
+  const v = String(value ?? '')
+  if (v.length < 8) return 'Password must be at least 8 characters.'
+  if (v.length > 40) return 'Password must be no more than 40 characters.'
+  if (!/[a-z]/.test(v)) return 'Password must include a lowercase letter.'
+  if (!/[A-Z]/.test(v)) return 'Password must include an uppercase letter.'
+  if (!/[0-9]/.test(v)) return 'Password must include a number.'
+  return null
+}
+
+// Ambiguous characters (l, I, 1, O, 0) are left out so the password survives
+// being read aloud or copied by hand.
+const PW_LOWER = 'abcdefghijkmnopqrstuvwxyz'
+const PW_UPPER = 'ABCDEFGHJKLMNPQRSTUVWXYZ'
+const PW_DIGITS = '23456789'
+const pickFrom = (set) => set[Math.floor(Math.random() * set.length)]
+
+function generatePassword() {
+  const all = PW_LOWER + PW_UPPER + PW_DIGITS
+  const chars = [pickFrom(PW_LOWER), pickFrom(PW_UPPER), pickFrom(PW_DIGITS)]
+  while (chars.length < 10) chars.push(pickFrom(all))
+  for (let i = chars.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1))
+    ;[chars[i], chars[j]] = [chars[j], chars[i]]
+  }
+  return chars.join('')
+}
 
 function sessionFor(row) {
   const user = toPublicUser(row)
@@ -84,19 +127,71 @@ app.post('/api/auth/register', async (req, res) => {
   res.status(201).json({ user: toPublicUser(row) })
 })
 
-// Site data persistence. Returns null until the client seeds it, then stores
-// whatever the client sends after each edit.
-app.get('/api/site-state', async (_req, res) => {
+// Site data persistence.
+//
+// This is the whole site's record — people, studies, participants. It is
+// readable and writable only by someone signed in to the site; an unauthenticated
+// caller gets 401 rather than the data.
+app.get('/api/site-state', async (req, res) => {
+  const caller = await currentUser(req)
+  if (!caller) return res.status(401).json({ error: 'Not signed in.' })
   res.json(await getSiteState())
 })
 
 app.put('/api/site-state', async (req, res) => {
+  const caller = await currentUser(req)
+  if (!caller) return res.status(401).json({ error: 'Not signed in.' })
+
   const body = req.body
   if (!body || typeof body !== 'object' || Array.isArray(body)) {
     return res.status(400).json({ error: 'Invalid site state.' })
   }
   await saveSiteState(body)
   res.json({ ok: true })
+})
+
+/**
+ * Issue a new password for a collaborator. Administrators only.
+ *
+ * The plaintext is returned exactly once, for the administrator to pass on;
+ * only its hash is stored. The account is flagged so its holder must choose
+ * their own password before they can use it for anything else.
+ */
+app.post('/api/auth/reset-password', async (req, res) => {
+  const caller = await currentUser(req)
+  if (!caller) return res.status(401).json({ error: 'Not signed in.' })
+  if (caller.role !== 'site_administrator') {
+    return res.status(403).json({ error: 'Only a site administrator can reset a password.' })
+  }
+
+  const { userId } = req.body ?? {}
+  if (!userId) return res.status(400).json({ error: 'userId is required.' })
+
+  const target = await findUserById(userId)
+  if (!target) return res.status(404).json({ error: 'Collaborator not found.' })
+
+  const password = generatePassword()
+  await setPassword(target.id, bcrypt.hashSync(password, 10), true)
+  res.json({ password, user: toPublicUser(await findUserById(target.id)) })
+})
+
+/** Replace an issued password with one of your own. */
+app.post('/api/auth/change-password', async (req, res) => {
+  const me = await currentUser(req)
+  if (!me) return res.status(401).json({ error: 'Not signed in.' })
+
+  const { currentPassword, newPassword } = req.body ?? {}
+  if (!currentPassword || !newPassword) {
+    return res.status(400).json({ error: 'Current and new password are required.' })
+  }
+  if (!bcrypt.compareSync(String(currentPassword), me.passwordHash)) {
+    return res.status(401).json({ error: 'That current password is not right.' })
+  }
+  const problem = passwordProblem(newPassword)
+  if (problem) return res.status(400).json({ error: problem })
+
+  await setPassword(me.id, bcrypt.hashSync(String(newPassword), 10), false)
+  res.json({ user: toPublicUser(await findUserById(me.id)) })
 })
 
 app.get('/api/auth/me', async (req, res) => {

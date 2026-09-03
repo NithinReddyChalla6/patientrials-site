@@ -7,17 +7,15 @@ import { required } from '@/lib/validators'
 import { Textarea } from '@/components/ui/textarea'
 import { Input } from '@/components/ui/input'
 import { Select } from '@/components/ui/select'
-import { Combobox } from '@/components/ui/combobox'
 import { Switch } from '@/components/ui/switch'
 import { Button } from '@/components/ui/button'
 import { ImagePicker } from '@/components/ui/file-drop'
-import { ListInput } from '@/components/ui/list-input'
 import { useToast } from '@/components/ui/toast'
 import { FormField } from '@/components/patterns/form-field'
-import { FormSection, FullWidth } from '@/components/patterns/form-section'
+import { FormSection } from '@/components/patterns/form-section'
 import { ErrorSummary } from '@/components/patterns/error-summary'
 import { AddressFields } from '@/components/patterns/address-fields'
-import { THERAPY_AREAS, TIME_ZONES } from '@/data/reference'
+import { TIME_ZONES } from '@/data/reference'
 import type { StepProps } from '../types'
 
 const LABELS = {
@@ -38,7 +36,11 @@ const LABELS = {
  * broken). Everything editable lives in one form so "unsaved changes" is tracked
  * across the toggle and branding too, and a single footer owns the save.
  */
-export function SiteDetailsStep({ data, reload }: StepProps) {
+export function SiteDetailsStep({
+  data,
+  reload,
+  withEditToggle = false,
+}: StepProps & { withEditToggle?: boolean }) {
   const toast = useToast()
   const summaryRef = React.useRef<HTMLDivElement>(null)
 
@@ -55,18 +57,15 @@ export function SiteDetailsStep({ data, reload }: StepProps) {
       state: data.site.address.state,
       zip: data.site.address.zip,
       country: data.site.address.country,
-      conditions: data.site.conditions ?? [],
-      keywords: data.site.keywords ?? [],
-      therapyArea: data.site.therapyArea ?? '',
-      capacity: String(data.site.capacity ?? 0),
-      expectedEnrollment: String(data.site.expectedEnrollment ?? 0),
-      totalEnrollment: String(data.site.totalEnrollment ?? 0),
     }),
     [data],
   )
 
   const [savedSig, setSavedSig] = React.useState(() => JSON.stringify(initialValues))
   const [savedOnce, setSavedOnce] = React.useState(false)
+  // In Edit Site the record opens read-only and is unlocked with "Edit"; in the
+  // guided wizard it is editable straight away.
+  const [editing, setEditing] = React.useState(!withEditToggle)
 
   const form = useForm({
     initialValues,
@@ -92,15 +91,10 @@ export function SiteDetailsStep({ data, reload }: StepProps) {
           zip: values.zip,
           country: values.country,
         },
-        conditions: values.conditions,
-        keywords: values.keywords,
-        therapyArea: values.therapyArea,
-        capacity: Number(values.capacity) || 0,
-        expectedEnrollment: Number(values.expectedEnrollment) || 0,
-        totalEnrollment: Number(values.totalEnrollment) || 0,
       })
       setSavedSig(JSON.stringify(values))
       setSavedOnce(true)
+      setEditing(!withEditToggle)
       toast.success('Site details saved', 'Your changes are stored.')
       reload()
     },
@@ -117,6 +111,14 @@ export function SiteDetailsStep({ data, reload }: StepProps) {
     }
   }
 
+  function cancelEdit() {
+    form.reset()
+    setEditing(false)
+  }
+
+  // In Edit Site, fields are locked until the record is put into edit mode.
+  const viewMode = withEditToggle && !editing
+
   const summaryErrors = {
     briefDescription: form.errors.briefDescription,
     timeZone: form.errors.timeZone,
@@ -131,6 +133,7 @@ export function SiteDetailsStep({ data, reload }: StepProps) {
         {form.submitAttempted && <ErrorSummary errors={summaryErrors} labels={LABELS} />}
       </div>
 
+      <fieldset disabled={viewMode} className="m-0 min-w-0 space-y-10 border-0 p-0">
       <section className="space-y-4">
         <div>
           <h2 className="text-sm font-semibold uppercase tracking-[0.06em] text-muted-foreground">
@@ -198,100 +201,6 @@ export function SiteDetailsStep({ data, reload }: StepProps) {
       </FormSection>
 
       <FormSection
-        title="Facility information"
-        description="The conditions you run trials in and your enrolment capacity. Sponsors weigh this when they consider your site."
-      >
-        <FullWidth>
-          <FormField
-            id="site-conditions"
-            label="Conditions"
-            hint="The conditions your site actively runs trials in."
-          >
-            {(aria) => (
-              <ListInput
-                {...aria}
-                chips
-                label="Conditions added"
-                placeholder="Add a condition, e.g. Heart Failure"
-                items={form.values.conditions}
-                onChange={(items) => form.setValue('conditions', items)}
-              />
-            )}
-          </FormField>
-        </FullWidth>
-
-        <FullWidth>
-          <FormField
-            id="site-keywords"
-            label="Keywords"
-            hint="Terms a sponsor might search your site by."
-          >
-            {(aria) => (
-              <ListInput
-                {...aria}
-                chips
-                label="Keywords added"
-                placeholder="Add a keyword, e.g. cardiology"
-                items={form.values.keywords}
-                onChange={(items) => form.setValue('keywords', items)}
-              />
-            )}
-          </FormField>
-        </FullWidth>
-
-        <FullWidth>
-          <FormField id="site-therapyArea" label="Therapy area">
-            {(aria) => (
-              <Combobox
-                {...aria}
-                options={THERAPY_AREAS.map((t) => ({ value: t, label: t }))}
-                value={form.values.therapyArea || undefined}
-                onChange={(value) => form.setValue('therapyArea', value ?? '')}
-                placeholder="Select a therapy area"
-                searchPlaceholder="Search therapy areas"
-              />
-            )}
-          </FormField>
-        </FullWidth>
-
-        <FullWidth>
-          <div className="grid gap-4 sm:grid-cols-3">
-            <FormField
-              id="site-capacity"
-              label="Capacity"
-              hint="Participants you can support at once."
-            >
-              {(aria) => (
-                <Input {...aria} {...form.field('capacity')} inputMode="numeric" autoComplete="off" />
-              )}
-            </FormField>
-
-            <FormField id="site-expectedEnrollment" label="Expected total enrollment">
-              {(aria) => (
-                <Input
-                  {...aria}
-                  {...form.field('expectedEnrollment')}
-                  inputMode="numeric"
-                  autoComplete="off"
-                />
-              )}
-            </FormField>
-
-            <FormField id="site-totalEnrollment" label="Total enrollment">
-              {(aria) => (
-                <Input
-                  {...aria}
-                  {...form.field('totalEnrollment')}
-                  inputMode="numeric"
-                  autoComplete="off"
-                />
-              )}
-            </FormField>
-          </div>
-        </FullWidth>
-      </FormSection>
-
-      <FormSection
         title="Branding"
         description="Optional. Appears on your participant-facing study pages."
         columns={1}
@@ -353,27 +262,49 @@ export function SiteDetailsStep({ data, reload }: StepProps) {
           }}
         />
       </FormSection>
+      </fieldset>
 
       <div className="flex flex-col-reverse gap-3 border-t border-border pt-6 sm:flex-row sm:items-center sm:justify-end">
-        <p aria-live="polite" className="text-sm sm:mr-auto">
-          {dirty ? (
-            <span className="text-muted-foreground">You have unsaved changes.</span>
-          ) : savedOnce ? (
-            <span className="inline-flex items-center gap-1.5 font-medium text-success">
-              <Check className="size-4" aria-hidden="true" />
-              All changes saved
-            </span>
-          ) : null}
-        </p>
-        <Button
-          type="submit"
-          variant="brand"
-          loading={form.submitting}
-          loadingLabel="Saving"
-          disabled={!dirty}
-        >
-          Save changes
-        </Button>
+        {editing && (
+          <p aria-live="polite" className="text-sm sm:mr-auto">
+            {dirty ? (
+              <span className="text-muted-foreground">You have unsaved changes.</span>
+            ) : savedOnce ? (
+              <span className="inline-flex items-center gap-1.5 font-medium text-success">
+                <Check className="size-4" aria-hidden="true" />
+                All changes saved
+              </span>
+            ) : null}
+          </p>
+        )}
+
+        {viewMode ? (
+          <Button type="button" variant="brand" onClick={() => setEditing(true)}>
+            Edit
+          </Button>
+        ) : (
+          <>
+            {withEditToggle && (
+              <Button
+                type="button"
+                variant="ghost"
+                onClick={cancelEdit}
+                disabled={form.submitting}
+              >
+                Cancel
+              </Button>
+            )}
+            <Button
+              type="submit"
+              variant="brand"
+              loading={form.submitting}
+              loadingLabel="Saving"
+              disabled={withEditToggle ? false : !dirty}
+            >
+              {withEditToggle ? 'Update' : 'Save changes'}
+            </Button>
+          </>
+        )}
       </div>
     </form>
   )

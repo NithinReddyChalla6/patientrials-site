@@ -10,6 +10,7 @@ import { Switch } from '@/components/ui/switch'
 import { useToast } from '@/components/ui/toast'
 import { FormField } from '@/components/patterns/form-field'
 import { FormSection, FullWidth } from '@/components/patterns/form-section'
+import { AddressFields } from '@/components/patterns/address-fields'
 import { ActiveDot } from '@/components/patterns/status-badge'
 import { FACILITY_TYPES } from '@/data/reference'
 import type { Facility, Site } from '@/data/types'
@@ -92,9 +93,11 @@ function FacilityForm({
       type: editing?.type ?? '',
       serviceEquipment: editing?.serviceEquipment ?? '',
       servicesOffered: editing?.servicesOffered ?? '',
+      street: editing?.address.street ?? '',
       city: editing?.address.city ?? '',
       state: editing?.address.state ?? '',
-      country: editing?.address.country ?? 'United States of America',
+      zip: editing?.address.zip ?? '',
+      country: editing?.address.country ?? '',
     },
     rules: {
       name: required('Facility name'),
@@ -109,7 +112,13 @@ function FacilityForm({
         active,
         serviceEquipment: values.serviceEquipment,
         servicesOffered: values.servicesOffered,
-        address: { city: values.city, state: values.state, country: values.country },
+        address: {
+          street: values.street,
+          city: values.city,
+          state: values.state,
+          zip: values.zip,
+          country: values.country,
+        },
       }
       if (editing) {
         await siteApi.updateFacility(editing.id, payload)
@@ -136,7 +145,7 @@ function FacilityForm({
           {(aria) => (
             <Input
               {...aria}
-              value={site.number}
+              value={site.name}
               readOnly
               className="bg-sunken text-muted-foreground"
             />
@@ -185,12 +194,29 @@ function FacilityForm({
       </FormSection>
 
       <FormSection title="Where it is">
-        <FormField id="facilityCity" label="City" error={form.errors.city} required>
-          {(aria) => <Input {...aria} {...form.field('city')} autoComplete="address-level2" />}
-        </FormField>
-        <FormField id="facilityState" label="State or province">
-          {(aria) => <Input {...aria} {...form.field('state')} autoComplete="address-level1" />}
-        </FormField>
+        <AddressFields
+          idPrefix="facility"
+          values={{
+            street: form.values.street,
+            city: form.values.city,
+            state: form.values.state,
+            zip: form.values.zip,
+            country: form.values.country,
+          }}
+          errors={{
+            street: form.errors.street,
+            city: form.errors.city,
+            state: form.errors.state,
+            zip: form.errors.zip,
+            country: form.errors.country,
+          }}
+          bind={(key) => form.field(key)}
+          onCountryChange={(value) => {
+            form.setValue('country', value)
+            form.blur('country')
+          }}
+          requiredKeys={['city']}
+        />
       </FormSection>
 
       <AddFormActions

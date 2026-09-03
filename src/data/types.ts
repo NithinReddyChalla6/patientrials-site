@@ -36,7 +36,21 @@ export interface User {
   siteId: string
   active: boolean
   invitedAt?: string
+  /**
+   * Set when an administrator issues a password. The account cannot be used for
+   * anything else until the holder chooses their own password.
+   */
+  mustChangePassword?: boolean
 }
+
+/** What a password must satisfy. Stated on screen so it is not guesswork. */
+export const PASSWORD_RULES = [
+  'At least 8 characters',
+  'No more than 40 characters',
+  'At least one lowercase letter',
+  'At least one uppercase letter',
+  'At least one number',
+] as const
 
 /* -------------------------------------------------------------------- site */
 
@@ -204,7 +218,33 @@ export interface StudyRequest {
 
 /* --------------------------------------------------------------- subjects */
 
-export type SubjectStatus = 'pending' | 'validated' | 'rejected' | 'recruited'
+/**
+ * The screening pipeline, in the order a participant moves through it. The
+ * legacy portal showed these six as counts across the top of the subject list.
+ */
+export type SubjectStatus =
+  | 'pending'
+  | 'validated'
+  | 'prescreened'
+  | 'recruited'
+  | 'rejected'
+  | 'dropped'
+
+/**
+ * The three decisions a reviewer takes on a participant. The remaining stages
+ * are reached by other means, so they are not offered as review actions.
+ */
+export type TriageAction = 'validated' | 'recruited' | 'rejected'
+
+/** Pipeline order, for the stage counts and filters. */
+export const SUBJECT_PIPELINE: SubjectStatus[] = [
+  'pending',
+  'validated',
+  'prescreened',
+  'recruited',
+  'rejected',
+  'dropped',
+]
 
 export interface Subject {
   id: string

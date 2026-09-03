@@ -1,6 +1,6 @@
 import * as React from 'react'
 import { Check, CircleSlash, ThumbsUp, UserCheck, X } from 'lucide-react'
-import type { Subject, SubjectStatus } from '@/data/types'
+import type { Subject, TriageAction } from '@/data/types'
 import { cn } from '@/lib/cn'
 import { formatDate, formatDateTime } from '@/lib/format'
 import { Button } from '@/components/ui/button'
@@ -12,7 +12,7 @@ interface SubjectDetailProps {
   subject: Subject
   canTriage: boolean
   busy: boolean
-  onAction: (status: SubjectStatus) => void
+  onAction: (status: TriageAction) => void
 }
 
 /**
