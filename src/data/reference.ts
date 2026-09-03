@@ -120,6 +120,60 @@ export const COUNTRY_TIME_ZONE: Record<string, string> = {
   'South Africa': '(GMT+02:00) South Africa Standard Time',
 }
 
+/** Bookable slots in the clinic day. */
+export const APPOINTMENT_SLOTS = [
+  '8:00 AM',
+  '9:00 AM',
+  '10:00 AM',
+  '11:00 AM',
+  '1:00 PM',
+  '2:00 PM',
+  '3:00 PM',
+  '4:00 PM',
+]
+
+/** Who runs a group session. Separate from STAFF_ROLES, which are sign-in roles. */
+export const SESSION_ROLES = [
+  'Principal Investigator',
+  'Clinical Nurse',
+  'Study Coordinator',
+  'Clinical Staff',
+]
+
+/** Dosing windows, as the legacy scheduler offered them. */
+export const DOSE_WINDOWS = [
+  '5AM to 7AM',
+  '7AM to 9AM',
+  '9AM to 12PM',
+  '12PM to 3PM',
+  '3PM to 6PM',
+  '6PM to 9PM',
+  '9PM to 12AM',
+]
+
+export const DAYS_OF_WEEK = [
+  'Monday',
+  'Tuesday',
+  'Wednesday',
+  'Thursday',
+  'Friday',
+  'Saturday',
+  'Sunday',
+]
+
+/** What a study asset is, so the list can be scanned by kind. */
+export const ASSET_TYPES = [
+  'Protocol',
+  'Investigator brochure',
+  'Training material',
+  'Recruitment material',
+  'Participant guide',
+  'Regulatory document',
+]
+
+/** Who an asset is published to. */
+export const ASSET_AUDIENCES = ['Participants', 'Site staff', 'Sponsor']
+
 export const IRB_MEETING_FREQUENCIES = [
   'Weekly',
   'Every two weeks',

@@ -27,6 +27,10 @@ export type Permission =
   | 'appointment.manage'
   | 'notification.manage'
   | 'location.manage'
+  | 'asset.manage'
+  | 'medication.manage'
+  | 'query.manage'
+  | 'consent.manage'
 
 const READ_ONLY: Permission[] = ['site.view', 'study.view', 'form.view']
 
@@ -48,6 +52,10 @@ const PERMISSIONS: Record<Role, Permission[]> = {
     'appointment.manage',
     'notification.manage',
     'location.manage',
+    'asset.manage',
+    'medication.manage',
+    'query.manage',
+    'consent.manage',
   ],
   study_administrator: [
     ...READ_ONLY,
@@ -64,15 +72,27 @@ const PERMISSIONS: Record<Role, Permission[]> = {
     'appointment.manage',
     'notification.manage',
     'location.manage',
+    'asset.manage',
+    'medication.manage',
+    'query.manage',
+    'consent.manage',
   ],
+  // A Principal Investigator works inside studies, not on the site record. The
+  // legacy portal gave them no site-setup navigation at all, so `site.view` is
+  // deliberately absent here rather than inherited from READ_ONLY.
   principal_investigator: [
-    ...READ_ONLY,
+    'study.view',
+    'form.view',
     'subject.triage',
     'prescreening.manage',
     'form.assign',
     'appointment.manage',
     'notification.manage',
     'study.request.respond',
+    'asset.manage',
+    'medication.manage',
+    'query.manage',
+    'consent.manage',
   ],
   study_coordinator: [
     ...READ_ONLY,

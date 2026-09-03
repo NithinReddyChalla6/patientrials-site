@@ -27,6 +27,7 @@ import { FieldSet, FormField } from '@/components/patterns/form-field'
 import { ConfirmDialog } from '@/components/patterns/confirm-dialog'
 import { useAuth } from '@/features/auth/auth-context'
 import { useStudy } from './study-layout'
+import { AppointmentBookings } from './appointment-bookings'
 
 /** "Week 2, day 6, 12:00" reads better than three loose numbers. */
 function describeSchedule(template: AppointmentTemplate) {
@@ -81,7 +82,12 @@ export function AppointmentsTab() {
   }
 
   return (
-    <div className="space-y-5">
+    <div className="space-y-10">
+      {/* Individual bookings lead: they are the day to day work. Templates
+          below describe the pattern every participant follows. */}
+      <AppointmentBookings studyId={study.id} />
+
+      <div className="space-y-5">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
         <div>
           <h2 className="text-lg font-semibold text-foreground">Appointment templates</h2>
@@ -202,6 +208,7 @@ export function AppointmentsTab() {
         loading={busy}
         onConfirm={remove}
       />
+      </div>
     </div>
   )
 }

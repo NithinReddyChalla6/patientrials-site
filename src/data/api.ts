@@ -17,6 +17,13 @@ import type {
   Site,
   SiteInitiationResponse,
   Study,
+  Appointment,
+  EConsent,
+  GroupSession,
+  Medication,
+  SponsorQuery,
+  Prescription,
+  StudyAsset,
   StudyForm,
   StudyWithCounts,
   StudyPromotion,
@@ -122,6 +129,13 @@ const db = {
   appointments: clone(seed.appointmentTemplates),
   notificationGroups: clone(seed.notificationGroups),
   approvedLocations: clone(seed.approvedLocations),
+  bookings: [] as Appointment[],
+  eConsents: clone(seed.eConsents),
+  groupSessions: clone(seed.groupSessions),
+  sponsorQueries: clone(seed.sponsorQueries),
+  medications: clone(seed.medications),
+  prescriptions: clone(seed.prescriptions),
+  studyAssets: clone(seed.studyAssets),
   publicTrials: clone(seed.publicTrials),
 }
 
@@ -820,6 +834,324 @@ export const studiesApi = {
       if (!study) throw new ApiError('Study not found.', 'not_found')
       study.status = status
       return clone(study)
+    }),
+}
+
+/* ----------------------------------------------------------- appointments */
+
+export const bookingsApi = {
+  listForStudy: (studyId: string) =>
+    read<Appointment[]>(
+      () =>
+        clone(
+          db.bookings
+            .filter((b) => b.studyId === studyId)
+            .sort((a, b) => (a.date + a.timeSlot).localeCompare(b.date + b.timeSlot)),
+        ),
+      [],
+    ),
+
+  listForSubject: (subjectId: string) =>
+    read<Appointment[]>(
+      () =>
+        clone(
+          db.bookings
+            .filter((b) => b.subjectId === subjectId)
+            .sort((a, b) => a.date.localeCompare(b.date)),
+        ),
+      [],
+    ),
+
+  /** Refuses a double booking: one participant cannot be in two places at once. */
+  add: (input: Omit<Appointment, 'id' | 'createdAt'>) =>
+    write(() => {
+      if (!input.subjectId) throw new ApiError('Choose which participant this is for.', 'invalid')
+      if (!input.date || !input.timeSlot) {
+        throw new ApiError('Choose a date and a time.', 'invalid')
+      }
+      if (input.scheduleType === 'In person' && !input.locationId) {
+        throw new ApiError('Choose where the visit takes place.', 'invalid')
+      }
+      const clash = db.bookings.some(
+        (b) =>
+          b.subjectId === input.subjectId &&
+          b.date === input.date &&
+          b.timeSlot === input.timeSlot,
+      )
+      if (clash) {
+        throw new ApiError('This participant already has an appointment at that time.', 'duplicate')
+      }
+      const record: Appointment = { ...input, id: nextId('APT'), createdAt: now() }
+      db.bookings.push(record)
+      return clone(record)
+    }),
+
+  remove: (id: string) =>
+    write(() => {
+      db.bookings = db.bookings.filter((b) => b.id !== id)
+    }),
+}
+
+/* ---------------------------------------------------------------- consent */
+
+export const eConsentsApi = {
+  list: (studyId: string) =>
+    read<EConsent[]>(
+      () =>
+        clone(
+          db.eConsents
+            .filter((c) => c.studyId === studyId)
+            .sort((a, b) => b.createdAt.localeCompare(a.createdAt)),
+        ),
+      [],
+    ),
+
+  /**
+   * Created in one write when the wizard finishes, so an abandoned draft never
+   * leaves a half-built consent behind.
+   */
+  add: (input: Omit<EConsent, 'id' | 'createdAt'>) =>
+    write(() => {
+      if (!input.description.trim()) {
+        throw new ApiError('Describe what this consent covers.', 'invalid')
+      }
+      if (!input.documentName) {
+        throw new ApiError('Attach the consent document.', 'invalid')
+      }
+      if (input.questions.length === 0) {
+        throw new ApiError('Add at least one comprehension question.', 'invalid')
+      }
+      const record: EConsent = { ...input, id: nextId('ICF'), createdAt: now() }
+      db.eConsents.push(record)
+      const study = db.studies.find((s) => s.id === input.studyId)
+      if (study) study.consentDocuments += 1
+      return clone(record)
+    }),
+
+  remove: (id: string) =>
+    write(() => {
+      const consent = db.eConsents.find((c) => c.id === id)
+      db.eConsents = db.eConsents.filter((c) => c.id !== id)
+      const study = consent && db.studies.find((s) => s.id === consent.studyId)
+      if (study && study.consentDocuments > 0) study.consentDocuments -= 1
+    }),
+}
+
+/* -------------------------------------------------------- group sessions */
+
+export const groupSessionsApi = {
+  list: (studyId: string) =>
+    read<GroupSession[]>(
+      () =>
+        clone(
+          db.groupSessions
+            .filter((g) => g.studyId === studyId)
+            .sort((a, b) => a.startAt.localeCompare(b.startAt)),
+        ),
+      [],
+    ),
+
+  add: (input: Omit<GroupSession, 'id' | 'createdAt'>) =>
+    write(() => {
+      if (!input.locationId) throw new ApiError('Choose where the session is held.', 'invalid')
+      if (!input.startAt || !input.endAt) {
+        throw new ApiError('A session needs a start and an end.', 'invalid')
+      }
+      if (input.endAt <= input.startAt) {
+        throw new ApiError('The session must end after it starts.', 'invalid')
+      }
+      const record: GroupSession = { ...input, id: nextId('GRP'), createdAt: now() }
+      db.groupSessions.push(record)
+      return clone(record)
+    }),
+
+  remove: (id: string) =>
+    write(() => {
+      db.groupSessions = db.groupSessions.filter((g) => g.id !== id)
+    }),
+}
+
+/* --------------------------------------------------------- sponsor queries */
+
+export const sponsorQueriesApi = {
+  list: (studyId: string) =>
+    read<SponsorQuery[]>(
+      () =>
+        clone(
+          db.sponsorQueries
+            .filter((q) => q.studyId === studyId)
+            .sort((a, b) => b.createdAt.localeCompare(a.createdAt)),
+        ),
+      [],
+    ),
+
+  /** Raise a question. It stays open until the sponsor answers it. */
+  add: (input: { studyId: string; question: string; raisedByName: string }) =>
+    write(() => {
+      const question = input.question.trim()
+      if (!question) throw new ApiError('Write your question before sending it.', 'invalid')
+      const record: SponsorQuery = {
+        id: nextId('QRY'),
+        studyId: input.studyId,
+        question,
+        raisedByName: input.raisedByName,
+        createdAt: now(),
+        status: 'open',
+      }
+      db.sponsorQueries.push(record)
+      return clone(record)
+    }),
+
+  remove: (id: string) =>
+    write(() => {
+      db.sponsorQueries = db.sponsorQueries.filter((q) => q.id !== id)
+    }),
+}
+
+/* ------------------------------------------------------------ medications */
+
+export const medicationsApi = {
+  list: (studyId: string) =>
+    read<Medication[]>(
+      () =>
+        clone(
+          db.medications
+            .filter((m) => m.studyId === studyId)
+            .sort((a, b) => a.name.localeCompare(b.name)),
+        ),
+      [],
+    ),
+
+  add: (input: Omit<Medication, 'id' | 'createdAt'>) =>
+    write(() => {
+      const exists = db.medications.some(
+        (m) => m.studyId === input.studyId && m.name.toLowerCase() === input.name.trim().toLowerCase(),
+      )
+      if (exists) {
+        throw new ApiError('That medication is already on this study.', 'duplicate')
+      }
+      const record: Medication = { ...input, id: nextId('MED'), createdAt: now() }
+      db.medications.push(record)
+      return clone(record)
+    }),
+
+  update: (id: string, patch: Partial<Omit<Medication, 'id' | 'studyId'>>) =>
+    write(() => {
+      const i = db.medications.findIndex((m) => m.id === id)
+      if (i === -1) throw new ApiError('Medication not found.', 'not_found')
+      db.medications[i] = { ...db.medications[i], ...patch }
+      return clone(db.medications[i])
+    }),
+
+  /** Refuses while anyone is still prescribed it, so a course cannot dangle. */
+  remove: (id: string) =>
+    write(() => {
+      const inUse = db.prescriptions.some((p) => p.medicationId === id)
+      if (inUse) {
+        throw new ApiError('This medication is prescribed to a participant, so it cannot be removed.', 'invalid')
+      }
+      db.medications = db.medications.filter((m) => m.id !== id)
+    }),
+}
+
+export const prescriptionsApi = {
+  listForSubject: (subjectId: string) =>
+    read<Prescription[]>(
+      () =>
+        clone(
+          db.prescriptions
+            .filter((p) => p.subjectId === subjectId)
+            .sort((a, b) => b.createdAt.localeCompare(a.createdAt)),
+        ),
+      [],
+    ),
+
+  add: (input: Omit<Prescription, 'id' | 'createdAt'>) =>
+    write(() => {
+      if (!db.medications.some((m) => m.id === input.medicationId)) {
+        throw new ApiError('Choose a medication to prescribe.', 'invalid')
+      }
+      if (input.endDate && input.endDate < input.startDate) {
+        throw new ApiError('The end date cannot be before the start date.', 'invalid')
+      }
+      if (input.doseWindows.length === 0) {
+        throw new ApiError('Choose at least one time of day.', 'invalid')
+      }
+      if (input.days.length === 0) {
+        throw new ApiError('Choose at least one day of the week.', 'invalid')
+      }
+      const record: Prescription = { ...input, id: nextId('RX'), createdAt: now() }
+      db.prescriptions.push(record)
+      return clone(record)
+    }),
+
+  remove: (id: string) =>
+    write(() => {
+      db.prescriptions = db.prescriptions.filter((p) => p.id !== id)
+    }),
+}
+
+/* ---------------------------------------------------------- study assets */
+
+export const studyAssetsApi = {
+  list: (studyId: string) =>
+    read<StudyAsset[]>(
+      () =>
+        clone(
+          db.studyAssets
+            .filter((a) => a.studyId === studyId)
+            .sort((a, b) => b.createdAt.localeCompare(a.createdAt)),
+        ),
+      [],
+    ),
+
+  get: (id: string) =>
+    read<StudyAsset>(() => {
+      const asset = db.studyAssets.find((a) => a.id === id)
+      if (!asset) throw new ApiError('Asset not found.', 'not_found')
+      return clone(asset)
+    }),
+
+  /** Assets are created as drafts; publishing is a separate, deliberate step. */
+  add: (input: Omit<StudyAsset, 'id' | 'status' | 'createdAt' | 'publishedAt'>) =>
+    write(() => {
+      const record: StudyAsset = {
+        ...input,
+        id: nextId('AST'),
+        status: 'draft',
+        createdAt: now(),
+      }
+      db.studyAssets.push(record)
+      return clone(record)
+    }),
+
+  update: (id: string, patch: Partial<Omit<StudyAsset, 'id' | 'studyId'>>) =>
+    write(() => {
+      const i = db.studyAssets.findIndex((a) => a.id === id)
+      if (i === -1) throw new ApiError('Asset not found.', 'not_found')
+      db.studyAssets[i] = { ...db.studyAssets[i], ...patch }
+      return clone(db.studyAssets[i])
+    }),
+
+  /**
+   * Publish, which is what makes an asset visible to its audience. An audience
+   * is required: publishing to nobody in particular is the mistake this guards.
+   */
+  publish: (id: string) =>
+    write(() => {
+      const asset = db.studyAssets.find((a) => a.id === id)
+      if (!asset) throw new ApiError('Asset not found.', 'not_found')
+      if (!asset.targetAudience) {
+        throw new ApiError('Choose a target audience before publishing.', 'invalid')
+      }
+      asset.status = 'published'
+      asset.publishedAt = now()
+      return clone(asset)
+    }),
+
+  remove: (id: string) =>
+    write(() => {
+      db.studyAssets = db.studyAssets.filter((a) => a.id !== id)
     }),
 }
 

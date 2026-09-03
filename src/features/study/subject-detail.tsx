@@ -7,6 +7,8 @@ import { Button } from '@/components/ui/button'
 import { Alert } from '@/components/ui/alert'
 import { SubjectStatusBadge } from '@/components/patterns/status-badge'
 import { ConfirmDialog } from '@/components/patterns/confirm-dialog'
+import { useAuth } from '@/features/auth/auth-context'
+import { SubjectPrescriptions } from './subject-prescriptions'
 
 interface SubjectDetailProps {
   subject: Subject
@@ -26,6 +28,7 @@ interface SubjectDetailProps {
  */
 export function SubjectDetail({ subject, canTriage, busy, onAction }: SubjectDetailProps) {
   const [confirmReject, setConfirmReject] = React.useState(false)
+  const { can } = useAuth()
 
   const mismatches = subject.prescreeningAnswers.filter(
     (a) => a.desired && a.answer !== a.desired,
@@ -128,6 +131,12 @@ export function SubjectDetail({ subject, canTriage, busy, onAction }: SubjectDet
             </p>
           </div>
         </section>
+
+        <SubjectPrescriptions
+          subjectId={subject.id}
+          studyId={subject.studyId}
+          canManage={can('medication.manage')}
+        />
       </div>
 
       {canTriage && (

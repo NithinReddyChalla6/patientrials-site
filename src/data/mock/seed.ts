@@ -10,6 +10,12 @@ import type {
   PublicTrial,
   Site,
   Study,
+  EConsent,
+  GroupSession,
+  Medication,
+  SponsorQuery,
+  Prescription,
+  StudyAsset,
   StudyForm,
   StudyRequest,
   Subject,
@@ -27,6 +33,9 @@ import type {
  */
 
 const daysAgo = (n: number) => new Date(Date.now() - n * 86_400_000).toISOString()
+/** A datetime-local value (no seconds or zone), which is what the pickers use. */
+const daysAhead = (n: number, time = '09:30') =>
+  new Date(Date.now() + n * 86_400_000).toISOString().slice(0, 10) + 'T' + time
 
 export const SITE_ID = 'SITE-MDASIT10'
 
@@ -791,6 +800,156 @@ export const approvedLocations: ApprovedLocation[] = [
 ]
 
 /** Public trial listings, keyed to the promoted/active studies above. */
+export const eConsents: EConsent[] = [
+  {
+    id: 'ICF-7001',
+    studyId: 'STU01268',
+    description: 'Main study consent, version 4',
+    witnessRequired: false,
+    documentName: 'ICF_main_v4.pdf',
+    questions: [
+      {
+        question: 'Do you understand that taking part is voluntary and you may withdraw at any time?',
+        desiredAnswer: 'Yes',
+      },
+      {
+        question: 'Do you understand that the study drug is given by infusion every three weeks?',
+        desiredAnswer: 'Yes',
+      },
+    ],
+    createdAt: daysAgo(58),
+  },
+  {
+    id: 'ICF-7002',
+    studyId: 'STU01268',
+    description: 'Optional genetic sub-study consent',
+    witnessRequired: true,
+    documentName: 'ICF_genetic_substudy.pdf',
+    questions: [
+      {
+        question: 'Do you agree to your samples being stored for future research?',
+        desiredAnswer: 'Yes',
+      },
+    ],
+    createdAt: daysAgo(21),
+  },
+]
+
+export const groupSessions: GroupSession[] = [
+  {
+    id: 'GRP-5001',
+    studyId: 'STU01268',
+    description: 'Infusion day orientation for the March cohort',
+    category: 'Clinics',
+    role: 'Clinical Nurse',
+    startAt: daysAhead(4, '09:30'),
+    endAt: daysAhead(4, '11:00'),
+    locationId: 'AL-1',
+    createdAt: daysAgo(6),
+  },
+]
+
+export const sponsorQueries: SponsorQuery[] = [
+  {
+    id: 'QRY-2001',
+    studyId: 'STU01268',
+    question:
+      'Participant PT240100 missed the day 8 blood draw by 36 hours. Is this a protocol deviation, or within the visit window?',
+    raisedByName: 'Lilly Joy',
+    createdAt: daysAgo(12),
+    status: 'answered',
+    response:
+      'Within the window. The day 8 assessment has a plus or minus 48 hour allowance, so no deviation is required.',
+    respondedAt: daysAgo(10),
+  },
+  {
+    id: 'QRY-2002',
+    studyId: 'STU01268',
+    question:
+      'Can the anti-emetic be given prophylactically before infusion, or only on symptom onset?',
+    raisedByName: 'Lilly Joy',
+    createdAt: daysAgo(3),
+    status: 'open',
+  },
+]
+
+export const medications: Medication[] = [
+  {
+    id: 'MED-3001',
+    studyId: 'STU01268',
+    name: 'Trastuzumab deruxtecan',
+    description: 'Study drug, administered by infusion on day 1 of each 21 day cycle.',
+    createdAt: daysAgo(70),
+  },
+  {
+    id: 'MED-3002',
+    studyId: 'STU01268',
+    name: 'Ondansetron',
+    description: 'Anti-emetic, taken as needed for nausea in the 48 hours after infusion.',
+    createdAt: daysAgo(66),
+  },
+  {
+    id: 'MED-3003',
+    studyId: 'STU01359',
+    name: 'Sacubitril/valsartan',
+    description: 'Twice daily, titrated to the tolerated dose.',
+    createdAt: daysAgo(30),
+  },
+]
+
+/** Prescriptions are written during the study, so none are seeded. */
+export const prescriptions: Prescription[] = []
+
+export const studyAssets: StudyAsset[] = [
+  {
+    id: 'AST-4001',
+    studyId: 'STU01268',
+    type: 'Protocol',
+    title: 'Protocol v3.2, amended dosing schedule',
+    link: 'https://assets.patientrials.com/STU01268/protocol-v3-2.pdf',
+    description: 'Current protocol, including the amended dosing schedule agreed in March.',
+    documentName: 'protocol-v3-2.pdf',
+    targetAudience: 'Site staff',
+    status: 'published',
+    createdAt: daysAgo(64),
+    publishedAt: daysAgo(60),
+  },
+  {
+    id: 'AST-4002',
+    studyId: 'STU01268',
+    type: 'Participant guide',
+    title: 'What to expect at your first visit',
+    link: '',
+    description: 'Plain-language walkthrough of the screening visit, given to participants at consent.',
+    documentName: 'first-visit-guide.pdf',
+    targetAudience: 'Participants',
+    status: 'published',
+    createdAt: daysAgo(41),
+    publishedAt: daysAgo(38),
+  },
+  {
+    id: 'AST-4003',
+    studyId: 'STU01268',
+    type: 'Training material',
+    title: 'Infusion handling refresher',
+    link: '',
+    description: 'Short refresher for nursing staff on preparation and handling.',
+    status: 'draft',
+    createdAt: daysAgo(9),
+  },
+  {
+    id: 'AST-4004',
+    studyId: 'STU01359',
+    type: 'Recruitment material',
+    title: 'Clinic waiting room poster',
+    link: 'https://assets.patientrials.com/STU01359/poster-a3.pdf',
+    description: 'A3 poster for the cardiology waiting room.',
+    documentName: 'poster-a3.pdf',
+    status: 'draft',
+    createdAt: daysAgo(5),
+  },
+]
+
 export const publicTrials: PublicTrial[] = [
   {
     nctId: 'NCT07764380',

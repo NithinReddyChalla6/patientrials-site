@@ -3,6 +3,7 @@ import { Navigate, Route, Routes } from 'react-router-dom'
 import { AppShell } from '@/components/layout/app-shell'
 import { PublicShell } from '@/components/layout/public-shell'
 import { ProtectedRoute } from '@/features/auth/protected-route'
+import { RequirePermission } from '@/features/auth/require-permission'
 import { LoginPage } from '@/features/auth/login-page'
 import { Spinner } from '@/components/ui/spinner'
 
@@ -77,6 +78,21 @@ const PrescreeningTab = lazy(() =>
 )
 const AssignmentTab = lazy(() =>
   import('@/features/study/assignment-tab').then((m) => ({ default: m.AssignmentTab })),
+)
+const StudyAssetsTab = lazy(() =>
+  import('@/features/study/study-assets-tab').then((m) => ({ default: m.StudyAssetsTab })),
+)
+const MedicationsTab = lazy(() =>
+  import('@/features/study/medications-tab').then((m) => ({ default: m.MedicationsTab })),
+)
+const EConsentsTab = lazy(() =>
+  import('@/features/study/econsents-tab').then((m) => ({ default: m.EConsentsTab })),
+)
+const GroupSessionsTab = lazy(() =>
+  import('@/features/study/group-sessions-tab').then((m) => ({ default: m.GroupSessionsTab })),
+)
+const QueriesTab = lazy(() =>
+  import('@/features/study/queries-tab').then((m) => ({ default: m.QueriesTab })),
 )
 const AppointmentsTab = lazy(() =>
   import('@/features/study/appointments-tab').then((m) => ({ default: m.AppointmentsTab })),
@@ -157,6 +173,11 @@ export function AppRoutes() {
               <Route path="prescreening" element={<PrescreeningTab />} />
               <Route path="forms" element={<AssignmentTab category="form" />} />
               <Route path="surveys" element={<AssignmentTab category="survey" />} />
+              <Route path="assets" element={<StudyAssetsTab />} />
+              <Route path="medications" element={<MedicationsTab />} />
+              <Route path="queries" element={<QueriesTab />} />
+              <Route path="group-sessions" element={<GroupSessionsTab />} />
+              <Route path="econsents" element={<EConsentsTab />} />
               <Route path="appointments" element={<AppointmentsTab />} />
               <Route path="notifications" element={<NotificationsTab />} />
               <Route path="locations" element={<LocationsTab />} />
@@ -174,10 +195,13 @@ export function AppRoutes() {
             <Route path="/surveys/:formId" element={<FormBuilderPage category="survey" />} />
             <Route path="/question-groups" element={<QuestionGroupsPage />} />
 
-            <Route path="/site" element={<SiteProfilePage />} />
-            <Route path="/site/:siteTab" element={<SiteProfilePage />} />
-            <Route path="/site/team" element={<TeamPage />} />
-            <Route path="/site/hierarchy" element={<SiteHierarchyPage />} />
+            {/* Site setup: only roles that hold `site.view` reach these at all. */}
+            <Route element={<RequirePermission permission="site.view" />}>
+              <Route path="/site" element={<SiteProfilePage />} />
+              <Route path="/site/:siteTab" element={<SiteProfilePage />} />
+              <Route path="/site/team" element={<TeamPage />} />
+              <Route path="/site/hierarchy" element={<SiteHierarchyPage />} />
+            </Route>
 
           </Route>
         </Route>

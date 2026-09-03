@@ -157,6 +157,142 @@ export interface Facility {
   address: Partial<Address>
 }
 
+/* ----------------------------------------------------------- appointments */
+
+/**
+ * A visit booked for one participant.
+ *
+ * Distinct from AppointmentTemplate, which describes a recurring pattern; this
+ * is a specific participant, at a specific time, in a specific place.
+ */
+export interface Appointment {
+  id: string
+  studyId: string
+  subjectId: string
+  description: string
+  scheduleType: ScheduleType
+  /** Who the participant is seeing. */
+  withName: string
+  /** Forms that must be completed at this visit. */
+  formIds: string[]
+  date: string
+  timeSlot: string
+  /** Where it happens. Not used for a virtual visit. */
+  locationId?: string
+  createdAt: string
+}
+
+/* ---------------------------------------------------------------- consent */
+
+/**
+ * A comprehension check on a consent document: what the participant is asked,
+ * and the answer that shows they understood.
+ */
+export interface ConsentQuestion {
+  question: string
+  desiredAnswer: string
+}
+
+/** A consent document a participant signs electronically. */
+export interface EConsent {
+  id: string
+  studyId: string
+  description: string
+  /** Some consents must be countersigned by a witness. */
+  witnessRequired: boolean
+  documentName?: string
+  questions: ConsentQuestion[]
+  createdAt: string
+}
+
+/* -------------------------------------------------------- group sessions */
+
+/**
+ * A session several participants attend together, at an approved location.
+ * Individual visits are appointments; this is the group equivalent.
+ */
+export interface GroupSession {
+  id: string
+  studyId: string
+  description: string
+  /** Kind of venue, matching the approved location's facility type. */
+  category: string
+  /** Who runs the session. */
+  role: string
+  startAt: string
+  endAt: string
+  locationId: string
+  createdAt: string
+}
+
+/* --------------------------------------------------------- sponsor queries */
+
+/** A question the site has raised with the sponsor, and the sponsor's reply. */
+export interface SponsorQuery {
+  id: string
+  studyId: string
+  question: string
+  raisedByName: string
+  createdAt: string
+  status: 'open' | 'answered'
+  response?: string
+  respondedAt?: string
+}
+
+/* ------------------------------------------------------------ medications */
+
+/** A medication a study can prescribe. Defined once, prescribed many times. */
+export interface Medication {
+  id: string
+  studyId: string
+  name: string
+  description: string
+  createdAt: string
+}
+
+/**
+ * One participant's course of a medication: when it runs, how much, and at
+ * which times on which days.
+ */
+export interface Prescription {
+  id: string
+  subjectId: string
+  medicationId: string
+  startDate: string
+  endDate: string
+  quantity: number
+  /** Times of day the dose is taken. */
+  doseWindows: string[]
+  /** Days of the week it is taken. */
+  days: string[]
+  createdAt: string
+}
+
+/* ----------------------------------------------------------- study assets */
+
+/** A published asset is visible to its audience; a draft is not. */
+export type AssetStatus = 'draft' | 'published'
+
+/**
+ * Material attached to a study — a protocol, a training deck, a participant
+ * guide. Assets are drafted, given an audience, then published.
+ */
+export interface StudyAsset {
+  id: string
+  studyId: string
+  type: string
+  title: string
+  /** Optional link to where the material is hosted. */
+  link: string
+  description: string
+  /** File name only; nothing is stored in this build. */
+  documentName?: string
+  targetAudience?: string
+  status: AssetStatus
+  createdAt: string
+  publishedAt?: string
+}
+
 /* ------------------------------------------------------------------ study */
 
 export type StudyStatus = 'promoted' | 'active' | 'archived'
