@@ -1,6 +1,7 @@
 import {
   Building2,
   CalendarClock,
+  ClipboardCheck,
   ClipboardList,
   FileSignature,
   FileText,
@@ -124,6 +125,7 @@ export const STUDY_TABS: StudyTab[] = [
   { segment: 'econsents', label: 'Consent Documents', icon: FileSignature, permission: 'study.view' },
   { segment: 'appointments', label: 'Appointment Templates', icon: CalendarClock, permission: 'study.view' },
   { segment: 'notifications', label: 'Notifications', icon: Inbox, permission: 'study.view' },
+  { segment: 'pending-tasks', label: 'Pending Tasks', icon: ClipboardCheck, permission: 'study.view' },
   { segment: 'locations', label: 'Approved Locations', icon: Building2, permission: 'study.view' },
   { segment: 'team', label: 'Team', icon: Users, permission: 'study.view' },
 ]

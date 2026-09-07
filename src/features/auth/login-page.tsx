@@ -68,6 +68,9 @@ export function LoginPage() {
   const navigate = useNavigate()
   const location = useLocation()
   const [serverError, setServerError] = React.useState<string>()
+  // The API sleeps when idle and takes the best part of a minute to wake. Left
+  // unexplained a sign-in that long reads as a hang, so say what is happening.
+  const [slowSignIn, setSlowSignIn] = React.useState(false)
   const from = (location.state as { from?: string } | null)?.from
   // Set while a fresh sign-in computes its own destination, so the effect below
   // does not also redirect and race it.
@@ -95,6 +98,15 @@ export function LoginPage() {
       }
     },
   })
+
+  React.useEffect(() => {
+    if (!form.submitting) {
+      setSlowSignIn(false)
+      return
+    }
+    const id = window.setTimeout(() => setSlowSignIn(true), 4000)
+    return () => window.clearTimeout(id)
+  }, [form.submitting])
 
   return (
     <div className="relative min-h-dvh overflow-hidden bg-[#f6fafd]">
@@ -173,6 +185,12 @@ export function LoginPage() {
               >
                 Log in
               </Button>
+
+              {slowSignIn && (
+                <p aria-live="polite" className="text-center text-xs text-muted-foreground">
+                  Waking the server. The first sign-in after a quiet spell can take up to a minute.
+                </p>
+              )}
             </form>
 
             <div className="mt-6 border-t border-border pt-5">
