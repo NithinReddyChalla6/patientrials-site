@@ -71,6 +71,9 @@ const StudyLayout = lazy(() =>
 const OverviewTab = lazy(() =>
   import('@/features/study/overview-tab').then((m) => ({ default: m.OverviewTab })),
 )
+const ProspectsTab = lazy(() =>
+  import('@/features/study/prospects-tab').then((m) => ({ default: m.ProspectsTab })),
+)
 const ParticipantsTab = lazy(() =>
   import('@/features/study/participants-tab').then((m) => ({ default: m.ParticipantsTab })),
 )
@@ -173,6 +176,7 @@ export function AppRoutes() {
               <Route index element={<Navigate to="participants" replace />} />
               <Route path="overview" element={<OverviewTab />} />
               <Route path="participants" element={<ParticipantsTab />} />
+              <Route path="prospects" element={<ProspectsTab />} />
               <Route path="prescreening" element={<PrescreeningTab />} />
               <Route path="forms" element={<AssignmentTab category="form" />} />
               <Route path="surveys" element={<AssignmentTab category="survey" />} />

@@ -27,6 +27,9 @@ import { LayoutGrid, Rows3 } from 'lucide-react'
 
 type Filter = SubjectStatus | 'all'
 
+/** Stages that mean a decision is still outstanding. */
+const PROSPECT_STAGES: Filter[] = ['pending', 'validated', 'prescreened']
+
 const FILTERS: { value: Filter; label: string }[] = [
   { value: 'pending', label: 'New Subjects' },
   { value: 'validated', label: 'Validated' },
@@ -111,11 +114,21 @@ const ACTION_COPY: Record<TriageAction, { verb: string; past: string; note?: str
  * A single record still opens in a quick-view panel beside the list, so
  * reviewing one participant never loses your place in the queue.
  */
-export function ParticipantsTab() {
+export function ParticipantsTab({ scope = 'subjects' }: { scope?: 'subjects' | 'prospects' } = {}) {
   const { study } = useStudy()
   const { can } = useAuth()
   const toast = useToast()
   const canTriage = can('subject.triage')
+
+  // Prospects are the people still being decided on, so the stages after a
+  // decision are not offered here.
+  const filters = React.useMemo(
+    () =>
+      scope === 'prospects'
+        ? FILTERS.filter((f) => PROSPECT_STAGES.includes(f.value))
+        : FILTERS,
+    [scope],
+  )
 
   const [filter, setFilter] = React.useState<Filter>('pending')
   const [query, setQuery] = React.useState('')
@@ -364,7 +377,7 @@ export function ParticipantsTab() {
   return (
     <div className="space-y-4">
       <div className="grid gap-2 sm:grid-cols-3 lg:grid-cols-5">
-        {FILTERS.map((f) => (
+        {filters.map((f) => (
           <StatTile
             key={f.value}
             label={f.label}

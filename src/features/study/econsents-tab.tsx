@@ -77,12 +77,6 @@ export function EConsentsTab() {
             <h3 className="text-sm font-semibold uppercase tracking-[0.06em] text-muted-foreground">
               {consents.length === 0 ? 'None added' : `${consents.length} added`}
             </h3>
-            {canManage && !adding && (
-              <Button variant="outline" size="sm" onClick={() => setAdding(true)}>
-                <Plus aria-hidden="true" />
-                Add eConsent
-              </Button>
-            )}
           </div>
 
           {canManage && adding && (
