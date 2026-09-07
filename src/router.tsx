@@ -2,6 +2,7 @@ import { Suspense, lazy } from 'react'
 import { Navigate, Route, Routes } from 'react-router-dom'
 import { AppShell } from '@/components/layout/app-shell'
 import { PublicShell } from '@/components/layout/public-shell'
+import { ErrorBoundary } from '@/components/patterns/error-boundary'
 import { ProtectedRoute } from '@/features/auth/protected-route'
 import { RequirePermission } from '@/features/auth/require-permission'
 import { LoginPage } from '@/features/auth/login-page'
@@ -142,7 +143,8 @@ function RouteFallback() {
 
 export function AppRoutes() {
   return (
-    <Suspense fallback={<RouteFallback />}>
+    <ErrorBoundary>
+      <Suspense fallback={<RouteFallback />}>
       <Routes>
         <Route path="/" element={<Navigate to="/login" replace />} />
         <Route path="/login" element={<LoginPage />} />
@@ -214,6 +216,7 @@ export function AppRoutes() {
 
         <Route path="*" element={<NotFoundPage />} />
       </Routes>
-    </Suspense>
+      </Suspense>
+    </ErrorBoundary>
   )
 }
