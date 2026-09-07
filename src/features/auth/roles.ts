@@ -53,8 +53,6 @@ const PERMISSIONS: Record<Role, Permission[]> = {
     'notification.manage',
     'location.manage',
     'asset.manage',
-    'medication.manage',
-    'query.manage',
     'consent.manage',
   ],
   study_administrator: [

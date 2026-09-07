@@ -21,20 +21,55 @@ import { SubjectStatusBadge } from '@/components/patterns/status-badge'
 import { useAuth } from '@/features/auth/auth-context'
 import { useStudy } from './study-layout'
 import { SubjectDetail } from './subject-detail'
+import { SubjectCards } from './subject-cards'
+import { bookingsApi } from '@/data/api'
+import { LayoutGrid, Rows3 } from 'lucide-react'
 
 type Filter = SubjectStatus | 'all'
 
 const FILTERS: { value: Filter; label: string }[] = [
-  { value: 'pending', label: 'Awaiting review' },
+  { value: 'pending', label: 'New Subjects' },
   { value: 'validated', label: 'Validated' },
   { value: 'prescreened', label: 'Pre-screened' },
   { value: 'recruited', label: 'Recruited' },
-  { value: 'rejected', label: 'Not eligible' },
+  { value: 'rejected', label: 'Rejected' },
   { value: 'dropped', label: 'Dropped' },
   { value: 'all', label: 'All' },
 ]
 
 const PAGE_SIZE = 25
+
+/** Cards for recognising one person, the table for working through a batch. */
+function ViewToggle({
+  view,
+  onChange,
+}: {
+  view: 'cards' | 'table'
+  onChange: (next: 'cards' | 'table') => void
+}) {
+  return (
+    <div className="inline-flex rounded-md border border-border p-0.5" role="group" aria-label="View">
+      <Button
+        variant={view === 'cards' ? 'secondary' : 'ghost'}
+        size="sm"
+        onClick={() => onChange('cards')}
+        aria-pressed={view === 'cards'}
+      >
+        <LayoutGrid aria-hidden="true" />
+        Cards
+      </Button>
+      <Button
+        variant={view === 'table' ? 'secondary' : 'ghost'}
+        size="sm"
+        onClick={() => onChange('table')}
+        aria-pressed={view === 'table'}
+      >
+        <Rows3 aria-hidden="true" />
+        Table
+      </Button>
+    </div>
+  )
+}
 
 function Shortcut({ keys, label }: { keys: string; label: string }) {
   return (
@@ -104,6 +139,8 @@ export function ParticipantsTab() {
     return () => window.clearTimeout(id)
   }, [query])
 
+  const [view, setView] = React.useState<'cards' | 'table'>('cards')
+  const bookings = useAsync(() => bookingsApi.listForStudy(study.id), [study.id])
   const counts = useAsync(() => subjectsApi.counts(study.id), [study.id])
   const list = useAsync(
     () =>
@@ -370,7 +407,35 @@ export function ParticipantsTab() {
         }
         errorTitle="We could not load participants"
       >
-        {(data) => (
+        {(data) =>
+          view === 'cards' ? (
+            <div className="space-y-4">
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <SearchInput
+                  className="sm:w-80"
+                  label="Search participants"
+                  placeholder="Search name, participant ID, email or city"
+                  value={query}
+                  onValueChange={setQuery}
+                />
+                <ViewToggle view={view} onChange={setView} />
+              </div>
+
+              <SubjectCards
+                subjects={data.items}
+                appointments={bookings.data ?? []}
+                onOpen={setOpenSubject}
+              />
+
+              <Pagination
+                page={data.page}
+                pageSize={data.pageSize}
+                total={data.total}
+                onPageChange={setPage}
+                itemLabel="participant"
+              />
+            </div>
+          ) : (
           <DataGrid
             storageKey="participants"
             caption="Participants"
@@ -383,13 +448,16 @@ export function ParticipantsTab() {
             onSelectionChange={setSelectedKeys}
             exportName={`participants-${study.id}`}
             toolbar={
-              <SearchInput
-                className="sm:w-80"
-                label="Search participants"
-                placeholder="Search name, participant ID, email or city"
-                value={query}
-                onValueChange={setQuery}
-              />
+              <div className="flex flex-wrap items-center gap-3">
+                <SearchInput
+                  className="sm:w-80"
+                  label="Search participants"
+                  placeholder="Search name, participant ID, email or city"
+                  value={query}
+                  onValueChange={setQuery}
+                />
+                <ViewToggle view={view} onChange={setView} />
+              </div>
             }
             bulkActions={(selected, clear) => (
               <>
@@ -430,7 +498,8 @@ export function ParticipantsTab() {
               />
             }
           />
-        )}
+          )
+        }
       </AsyncBoundary>
 
       {canTriage ? (

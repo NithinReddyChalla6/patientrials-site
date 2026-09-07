@@ -34,11 +34,11 @@ const RECRUITMENT_TONES: Record<TrialStatus, BadgeTone> = {
 }
 
 const SUBJECT_TONES: Record<SubjectStatus, { tone: BadgeTone; label: string }> = {
-  pending: { tone: 'warning', label: 'Awaiting review' },
+  pending: { tone: 'warning', label: 'New' },
   validated: { tone: 'info', label: 'Validated' },
   prescreened: { tone: 'brand', label: 'Pre-screened' },
   recruited: { tone: 'success', label: 'Recruited' },
-  rejected: { tone: 'danger', label: 'Not eligible' },
+  rejected: { tone: 'danger', label: 'Rejected' },
   dropped: { tone: 'outline', label: 'Dropped' },
 }
 

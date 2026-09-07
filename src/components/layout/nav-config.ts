@@ -114,15 +114,15 @@ export interface StudyTab {
 }
 
 export const STUDY_TABS: StudyTab[] = [
-  { segment: '', label: 'Overview', icon: LayoutDashboard },
-  { segment: 'participants', label: 'Participants', icon: Users, permission: 'study.view' },
+  { segment: 'participants', label: 'Subjects', icon: Users, permission: 'study.view' },
+  { segment: 'overview', label: 'Overview', icon: LayoutDashboard },
   { segment: 'prescreening', label: 'Pre-screening', icon: ListChecks, permission: 'study.view' },
   { segment: 'forms', label: 'Forms', icon: FileText, permission: 'form.view' },
   { segment: 'surveys', label: 'Surveys', icon: ClipboardList, permission: 'form.view' },
   { segment: 'assets', label: 'Study Assets', icon: FolderOpen, permission: 'study.view' },
-  { segment: 'medications', label: 'Medications', icon: Pill, permission: 'study.view' },
+  { segment: 'medications', label: 'Medications', icon: Pill, permission: 'medication.manage' },
   { segment: 'econsents', label: 'eConsents', icon: FileSignature, permission: 'study.view' },
-  { segment: 'queries', label: 'Sponsor Queries', icon: MessageSquare, permission: 'study.view' },
+  { segment: 'queries', label: 'Sponsor Queries', icon: MessageSquare, permission: 'query.manage' },
   { segment: 'appointments', label: 'Appointments', icon: CalendarClock, permission: 'study.view' },
   { segment: 'group-sessions', label: 'Group Appointments', icon: CalendarDays, permission: 'study.view' },
   { segment: 'notifications', label: 'Notifications', icon: Inbox, permission: 'study.view' },

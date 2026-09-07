@@ -168,14 +168,20 @@ export function AppRoutes() {
             <Route path="/studies/new" element={<CreateStudyPage />} />
             <Route path="/studies/:studyId/promote" element={<PromoteStudyPage />} />
             <Route path="/studies/:studyId" element={<StudyLayout />}>
-              <Route index element={<OverviewTab />} />
+              <Route index element={<Navigate to="participants" replace />} />
+              <Route path="overview" element={<OverviewTab />} />
               <Route path="participants" element={<ParticipantsTab />} />
               <Route path="prescreening" element={<PrescreeningTab />} />
               <Route path="forms" element={<AssignmentTab category="form" />} />
               <Route path="surveys" element={<AssignmentTab category="survey" />} />
               <Route path="assets" element={<StudyAssetsTab />} />
-              <Route path="medications" element={<MedicationsTab />} />
-              <Route path="queries" element={<QueriesTab />} />
+              {/* Clinical work: the investigator's, not site administration. */}
+              <Route element={<RequirePermission permission="medication.manage" />}>
+                <Route path="medications" element={<MedicationsTab />} />
+              </Route>
+              <Route element={<RequirePermission permission="query.manage" />}>
+                <Route path="queries" element={<QueriesTab />} />
+              </Route>
               <Route path="group-sessions" element={<GroupSessionsTab />} />
               <Route path="econsents" element={<EConsentsTab />} />
               <Route path="appointments" element={<AppointmentsTab />} />
