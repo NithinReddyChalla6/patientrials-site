@@ -4,6 +4,7 @@ import {
   CalendarClock,
   ClipboardCheck,
   ClipboardList,
+  Database,
   FileSignature,
   FileText,
   FlaskConical,
@@ -60,6 +61,13 @@ export const NAV_GROUPS: NavGroup[] = [
       { to: '/studies', label: 'Studies', icon: FlaskConical, permission: 'study.view' },
       { to: '/requests', label: 'New Study Request', icon: Inbox, permission: 'study.view' },
       { to: '/dashboard', label: 'Dashboard', icon: LayoutDashboard, inferred: true },
+      {
+        to: '/emr-preview',
+        label: 'EMR Preview',
+        icon: Database,
+        permission: 'study.view',
+        inferred: true,
+      },
     ],
   },
   {

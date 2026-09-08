@@ -104,6 +104,9 @@ const QueriesTab = lazy(() =>
 const AppointmentsTab = lazy(() =>
   import('@/features/study/appointments-tab').then((m) => ({ default: m.AppointmentsTab })),
 )
+const EmrPreviewPage = lazy(() =>
+  import('@/features/emr/emr-preview-page').then((m) => ({ default: m.EmrPreviewPage })),
+)
 const VisitComplianceTab = lazy(() =>
   import('@/features/study/visit-compliance-tab').then((m) => ({
     default: m.VisitComplianceTab,
@@ -176,6 +179,7 @@ export function AppRoutes() {
 
           <Route element={<AppShell />}>
             <Route path="/dashboard" element={<DashboardPage />} />
+            <Route path="/emr-preview" element={<EmrPreviewPage />} />
 
             <Route path="/studies" element={<StudiesPage />} />
             <Route path="/studies/new" element={<CreateStudyPage />} />
