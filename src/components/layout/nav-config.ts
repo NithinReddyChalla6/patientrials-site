@@ -64,7 +64,7 @@ export const NAV_GROUPS: NavGroup[] = [
     label: 'Work',
     items: [
       { to: '/studies', label: 'Studies', icon: FlaskConical, permission: 'study.view' },
-      { to: '/requests', label: 'New Study Request', icon: Inbox, permission: 'study.view' },
+      { to: '/requests', label: 'New Study Request', icon: Inbox, permission: 'study.setup' },
       { to: '/dashboard', label: 'Dashboard', icon: LayoutDashboard, inferred: true },
       {
         to: '/emr-preview',
@@ -76,15 +76,18 @@ export const NAV_GROUPS: NavGroup[] = [
     ],
   },
   {
+    // Gated on `form.create`, not `form.view`. The library is where forms and
+    // question groups are built; an investigator assigns them inside a study
+    // and never authors one, so a link to the workshop is noise on their nav.
     id: 'library',
     label: 'Library',
     items: [
-      { to: '/forms', label: 'Forms', icon: FileText, permission: 'form.view' },
+      { to: '/forms', label: 'Forms', icon: FileText, permission: 'form.create' },
       {
         to: '/question-groups',
         label: 'Question Groups',
         icon: ListChecks,
-        permission: 'form.view',
+        permission: 'form.create',
         inferred: true,
       },
     ],

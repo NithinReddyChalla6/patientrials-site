@@ -37,7 +37,10 @@ const PAGE_SIZE = 25
  * A grid-first working screen: the toolbar, sort, column control, density,
  * export and bulk actions all live on the grid, and the card view is the
  * alternate for browsing rather than the default. The four status tiles are the
- * facet filter, carrying their counts and their pressed state.
+ * facet filter, carrying their counts and their pressed state — for everyone
+ * who runs a portfolio of studies. An investigator is shown only the studies
+ * they lead, usually a handful, so a promoted/active/archived breakdown of
+ * their own list counts nothing worth counting and is left out.
  */
 export function StudiesPage() {
   const [params, setParams] = useSearchParams()
@@ -279,7 +282,11 @@ export function StudiesPage() {
     <div className="mx-auto w-full max-w-[100rem] space-y-4">
       <PageHeader
         title="Studies"
-        description="Every study your site has taken on, from first promotion through to archive."
+        description={
+          investigatorId
+            ? 'The studies you are named investigator on.'
+            : 'Every study your site has taken on, from first promotion through to archive.'
+        }
         actions={
           can('study.create') && (
             <Button id="create-study" variant="brand" asChild>
@@ -292,18 +299,20 @@ export function StudiesPage() {
         }
       />
 
-      <div className="grid gap-2 sm:grid-cols-4">
-        {FILTERS.map((filter) => (
-          <StatTile
-            key={filter.value}
-            id={filter.value}
-            label={filter.label}
-            value={counts.data?.[filter.value] ?? '—'}
-            selected={status === filter.value}
-            onSelect={() => patch({ status: filter.value, page: null })}
-          />
-        ))}
-      </div>
+      {can('study.setup') && (
+        <div className="grid gap-2 sm:grid-cols-4">
+          {FILTERS.map((filter) => (
+            <StatTile
+              key={filter.value}
+              id={filter.value}
+              label={filter.label}
+              value={counts.data?.[filter.value] ?? '—'}
+              selected={status === filter.value}
+              onSelect={() => patch({ status: filter.value, page: null })}
+            />
+          ))}
+        </div>
+      )}
 
       <AsyncBoundary
         state={studies}
