@@ -627,26 +627,69 @@ export const siteApi = {
     }),
 
   listCollaborators: () => read<User[]>(() => clone(db.users), []),
-  addCollaborator: (input: {
+  /**
+   * Add someone to the site, with a sign-in they can actually use.
+   *
+   * This wrote the person into the site's own record and stopped, so they
+   * appeared on the Team screen with no account behind them: they could not
+   * sign in, and resetting their password answered 404 because the user had
+   * never been created. The screen said an invitation had been sent.
+   *
+   * The server creates the account and returns a password once, for the
+   * administrator to pass on — there is no mail server, so that is the honest
+   * version of an invitation. Without a server it stays a local record, which
+   * is all the demo can offer and all it claims.
+   */
+  addCollaborator: async (input: {
     firstName: string
     lastName: string
     email: string
     role: Role
-  }) =>
-    writePersist(() => {
-      if (db.users.some((u) => u.email.toLowerCase() === input.email.toLowerCase())) {
-        throw new ApiError('This person has already been added to the site.', 'duplicate')
+  }): Promise<{ user: User; password?: string }> => {
+    if (db.users.some((u) => u.email.toLowerCase() === input.email.toLowerCase())) {
+      throw new ApiError('This person has already been added to the site.', 'duplicate')
+    }
+
+    const token = authToken()
+    if (token) {
+      let res: Response | undefined
+      try {
+        res = await fetch(`${AUTH_API}/api/collaborators`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+          body: JSON.stringify(input),
+        })
+      } catch {
+        res = undefined // no server reachable — fall through to the demo path
       }
-      const record: User = {
-        ...input,
-        id: nextId('USR'),
-        siteId: db.site.id,
-        active: true,
-        invitedAt: now(),
+      if (res) {
+        const body = (await res.json().catch(() => ({}))) as {
+          user?: User
+          password?: string
+          error?: string
+        }
+        if (!res.ok) throw new ApiError(body.error ?? 'We could not add this person.')
+        if (body.user) {
+          // Kept in step with the server's id, so a later password reset finds
+          // the same person the account was created for.
+          db.users.push(body.user)
+          await persistState()
+          return { user: body.user, password: body.password }
+        }
       }
-      db.users.push(record)
-      return record
-    }),
+    }
+
+    const record: User = {
+      ...input,
+      id: nextId('USR'),
+      siteId: db.site.id,
+      active: true,
+      invitedAt: now(),
+    }
+    db.users.push(record)
+    await persistState()
+    return { user: record }
+  },
   updateCollaborator: (id: string, patch: Partial<User>) =>
     writePersist(() => {
       const i = db.users.findIndex((u) => u.id === id)

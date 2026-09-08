@@ -73,16 +73,26 @@ export function TeamManager({
     onSubmit: async (values) => {
       setServerError(undefined)
       try {
-        await siteApi.addCollaborator({
+        const result = await siteApi.addCollaborator({
           firstName: values.firstName,
           lastName: values.lastName,
           email: values.email,
           role: values.role as Role,
         })
-        toast.success(
-          `${values.firstName} ${values.lastName} added`,
-          'They will receive an invitation to set their password.',
-        )
+        // The password comes back once, so it goes straight into the same
+        // dialog a reset uses rather than a toast that scrolls away. There is
+        // no mail server behind this: telling someone an invitation had been
+        // sent was the part that was untrue.
+        if (result.password) {
+          setCopied(false)
+          setSaved(false)
+          setIssued({
+            name: `${result.user.firstName} ${result.user.lastName}`,
+            password: result.password,
+          })
+        } else {
+          toast.success(`${values.firstName} ${values.lastName} added`)
+        }
         form.reset()
         reload()
       } catch (error) {

@@ -175,6 +175,49 @@ app.post('/api/auth/reset-password', async (req, res) => {
   res.json({ password, user: toPublicUser(await findUserById(target.id)) })
 })
 
+/**
+ * Add a collaborator, with a sign-in that actually exists.
+ *
+ * The Team screen used to write the person into the site's own record and
+ * stop there, so they appeared in the list with no account behind them: they
+ * could not sign in, and resetting their password answered 404 because the
+ * user was never created. The screen said an invitation had gone out. Nothing
+ * had.
+ *
+ * The password is generated here and returned once, the same way a reset works
+ * — there is no mail server, so an administrator passing it on by hand is the
+ * honest version of "we invited them".
+ */
+app.post('/api/collaborators', async (req, res) => {
+  const caller = await currentUser(req)
+  if (!caller) return res.status(401).json({ error: 'Not signed in.' })
+  if (caller.role !== 'site_administrator') {
+    return res.status(403).json({ error: 'Only a site administrator can add a collaborator.' })
+  }
+
+  const { firstName, lastName, email, role } = req.body ?? {}
+  if (!firstName || !lastName || !email || !role) {
+    return res.status(400).json({ error: 'Name, email address and role are all required.' })
+  }
+  if (await emailExists(email)) {
+    return res.status(409).json({ error: 'This person has already been added to the site.' })
+  }
+
+  const password = generatePassword()
+  const row = await createUser({
+    firstName,
+    lastName,
+    email,
+    password,
+    role,
+    siteId: caller.siteId,
+  })
+  await setPassword(row.id, row.passwordHash, true)
+  // Re-read: `row` predates the flag being set, and returning it would tell the
+  // browser this person may keep the issued password.
+  res.status(201).json({ user: toPublicUser(await findUserById(row.id)), password })
+})
+
 /** Replace an issued password with one of your own. */
 app.post('/api/auth/change-password', async (req, res) => {
   const me = await currentUser(req)
