@@ -298,13 +298,13 @@ app.post('/api/assistant', async (req, res) => {
   // route it invents cannot become a button.
   const places = (Array.isArray(destinations) ? destinations : [])
     .filter((d) => typeof d?.path === 'string' && typeof d?.label === 'string')
-    .slice(0, 40)
+    .slice(0, 120)
 
   const system = [
     ASSISTANT_SYSTEM,
     context ? `\n\nHere is what you can see right now:\n${String(context).slice(0, 6000)}` : '',
     places.length
-      ? `\n\nScreens you may offer to open:\n${places.map((d) => `- ${d.path} — ${d.label}`).join('\n')}`
+      ? `\n\nScreens and records you may offer to open:\n${places.map((d) => `- ${d.path} — ${d.label}`).join('\n')}`
       : '',
   ].join('')
 

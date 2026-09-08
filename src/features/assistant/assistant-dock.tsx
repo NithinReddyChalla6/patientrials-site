@@ -1,7 +1,7 @@
 import * as React from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
-import { ArrowRight, Bot, Send, Sparkles, X } from 'lucide-react'
-import { siteApi, studiesApi, subjectsApi, ApiError } from '@/data/api'
+import { ArrowRight, Bot, Mic, Send, Sparkles, Square, X } from 'lucide-react'
+import { formsApi, siteApi, studiesApi, subjectsApi, ApiError } from '@/data/api'
 import {
   ask,
   siteSummary,
@@ -12,6 +12,7 @@ import {
 import { Textarea } from '@/components/ui/textarea'
 import { Button } from '@/components/ui/button'
 import { Alert } from '@/components/ui/alert'
+import { useDictation } from '@/lib/use-dictation'
 import { NAV_GROUPS, STUDY_TABS } from '@/components/layout/nav-config'
 import { useAuth } from '@/features/auth/auth-context'
 
@@ -123,7 +124,7 @@ export function AssistantDock() {
    * does not have. Built here rather than on the server for that reason: only
    * the browser knows who is looking.
    */
-  const destinations = React.useMemo<Destination[]>(() => {
+  const screens = React.useMemo<Destination[]>(() => {
     const out: Destination[] = NAV_GROUPS.flatMap((g) =>
       g.items
         .filter((i) => !i.permission || can(i.permission))
@@ -136,6 +137,32 @@ export function AssistantDock() {
     }
     return out
   }, [studyId, can])
+
+  /**
+   * Screens plus the records you can name.
+   *
+   * "Open the Ayurvedic Lifestyle form" is a reasonable thing to say, and a
+   * list of screens alone cannot answer it — the assistant could only report
+   * that no such screen existed. Individual studies and forms have routes of
+   * their own, so they belong in the list too, named the way a person would
+   * say them.
+   */
+  async function destinationsNow(): Promise<Destination[]> {
+    const named: Destination[] = []
+    try {
+      const [studies, forms] = await Promise.all([
+        studiesApi.list({ status: 'all', page: 1, pageSize: 50 }),
+        can('form.view') ? formsApi.list({ category: 'form' }) : Promise.resolve([]),
+      ])
+      studies.items.forEach((st) =>
+        named.push({ path: `/studies/${st.id}`, label: `Study ${st.id} — ${st.title}` }),
+      )
+      forms.forEach((f) => named.push({ path: `/forms/${f.id}`, label: `Form: ${f.title}` }))
+    } catch {
+      // A failed lookup costs the named records, not the screens.
+    }
+    return [...screens, ...named]
+  }
 
   /**
    * Built at send time, not on open. The panel stays open while you navigate,
@@ -178,7 +205,8 @@ export function AssistantDock() {
     setThinking(true)
 
     try {
-      const answer = await ask(next, await contextNow(), destinations)
+      const [context, places] = await Promise.all([contextNow(), destinationsNow()])
+      const answer = await ask(next, context, places)
       setTurns([...next, { role: 'assistant', content: answer.reply, goTo: answer.goTo }])
     } catch (err) {
       setError(err instanceof ApiError ? err.message : 'The assistant could not answer.')
@@ -186,6 +214,12 @@ export function AssistantDock() {
       setThinking(false)
     }
   }
+
+  // Speech goes straight through as a question. Dropping it into the box for
+  // the speaker to then reach for the mouse defeats the point of talking.
+  const sendRef = React.useRef(send)
+  sendRef.current = send
+  const dictation = useDictation(React.useCallback((said) => void sendRef.current(said), []))
 
   const firstName = session?.user.firstName ?? 'there'
   const starters = studyId ? STARTERS_STUDY : STARTERS_SITE
@@ -290,10 +324,10 @@ export function AssistantDock() {
           </div>
 
           <div className="border-t border-border bg-card p-2.5">
-            {error && (
+            {(error || dictation.error) && (
               <div className="mb-2">
-                <Alert tone="error" title="Could not answer">
-                  {error}
+                <Alert tone="error" title={error ? 'Could not answer' : 'Dictation'}>
+                  {error ?? dictation.error}
                 </Alert>
               </div>
             )}
@@ -307,10 +341,27 @@ export function AssistantDock() {
               <label htmlFor="assistant-dock-input" className="sr-only">
                 Ask the assistant
               </label>
+              {dictation.supported && (
+                <Button
+                  type="button"
+                  variant={dictation.listening ? 'brand' : 'outline'}
+                  size="icon"
+                  onClick={() => (dictation.listening ? dictation.stop() : dictation.start())}
+                  aria-label={dictation.listening ? 'Stop dictating' : 'Ask by voice'}
+                  aria-pressed={dictation.listening}
+                >
+                  {dictation.listening ? (
+                    <Square aria-hidden="true" />
+                  ) : (
+                    <Mic aria-hidden="true" />
+                  )}
+                </Button>
+              )}
               <Textarea
                 id="assistant-dock-input"
                 ref={inputRef}
-                value={draft}
+                value={dictation.listening ? dictation.transcript : draft}
+                readOnly={dictation.listening}
                 onChange={(e) => setDraft(e.target.value)}
                 // Enter sends, shift+enter breaks the line — what every chat
                 // does, and what a coordinator's hands already expect.
@@ -321,7 +372,7 @@ export function AssistantDock() {
                   }
                 }}
                 rows={1}
-                placeholder="Ask a question…"
+                placeholder={dictation.listening ? 'Listening…' : 'Ask a question…'}
                 className="min-h-10 flex-1 resize-none text-sm"
               />
               <Button type="submit" variant="brand" size="icon" disabled={!draft.trim() || thinking}>
