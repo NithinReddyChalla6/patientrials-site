@@ -1,5 +1,4 @@
 import {
-  Bot,
   Building2,
   CalendarCheck,
   CalendarDays,
@@ -142,7 +141,6 @@ export interface StudyTab {
 
 export const STUDY_TABS: StudyTab[] = [
   { segment: 'participants', label: 'Subjects', icon: Users, permission: 'study.view' },
-  { segment: 'assistant', label: 'Assistant', icon: Bot, permission: 'study.view' },
   { segment: 'prospects', label: 'Study Prospects', icon: UserSearch, permission: 'study.setup' },
   { segment: 'overview', label: 'Overview', icon: LayoutDashboard, permission: 'study.setup' },
   { segment: 'prescreening', label: 'Pre-screening', icon: ListChecks, permission: 'study.setup' },

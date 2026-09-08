@@ -8,6 +8,7 @@ import { TopBar } from './top-bar'
 import { CommandPalette, useCommandPalette } from './command-palette'
 import { useAsync } from '@/lib/use-async'
 import { siteApi } from '@/data/api'
+import { AssistantDock } from '@/features/assistant/assistant-dock'
 
 /**
  * Console layout: persistent sidebar on large screens, a focus-trapped sheet
@@ -86,6 +87,10 @@ export function AppShell() {
       </div>
 
       <CommandPalette open={palette.open} onOpenChange={palette.setOpen} />
+      {/* Docked rather than a page: the question arrives mid-task, and
+          having to navigate to ask it is enough friction that it goes
+          unasked. */}
+      <AssistantDock />
     </div>
   )
 }

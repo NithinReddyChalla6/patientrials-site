@@ -34,6 +34,25 @@ export function studySummary(study: Study, subjects: Subject[]): string {
 }
 
 /**
+ * What the assistant can see when you are not inside a study.
+ *
+ * The site's studies and where each one stands. Enough to answer "which trials
+ * are we recruiting for" or "which one is behind" without naming a single
+ * participant.
+ */
+export function siteSummary(studies: Study[]): string {
+  if (studies.length === 0) return 'This site has no studies yet.'
+  const lines = studies.map(
+    (s) =>
+      `- ${s.id} (${s.nctId}): ${s.title}. ${s.condition}, ${s.phase}, sponsor ${s.sponsor}. ` +
+      `Status ${s.status}, recruitment ${s.recruitmentStatus}, ` +
+      `enrolled ${s.enrolled} of ${s.enrollmentTarget}.` +
+      (s.principalInvestigatorId ? '' : ' No investigator assigned.'),
+  )
+  return [`This site has ${studies.length} studies.`, ...lines].join('\n')
+}
+
+/**
  * Ask the assistant.
  *
  * Goes to our own server, never to the model provider: the API key lives there,
