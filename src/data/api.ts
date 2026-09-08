@@ -178,6 +178,31 @@ function generatePassword(): string {
 
 let idCounter = 9000
 const nextId = (prefix: string) => `${prefix}-${(idCounter += 1)}`
+
+/**
+ * Move the counter past every id already in the store.
+ *
+ * Ids are `PREFIX-<n>` drawn from one counter that starts at the same number
+ * on every page load, while the store itself is persisted and reloaded. Without
+ * this, the first record created after a reload takes an id the store already
+ * holds. That used to be a cosmetic duplicate-key warning; it stopped being
+ * cosmetic once bookings began pointing at appointment templates by id, because
+ * two templates sharing one id silently attaches a visit to whichever the
+ * lookup reaches first.
+ */
+function reseedIdCounter(): void {
+  let highest = idCounter
+  for (const value of Object.values(db as Record<string, unknown>)) {
+    if (!Array.isArray(value)) continue
+    for (const row of value) {
+      const id = (row as { id?: unknown } | null)?.id
+      if (typeof id !== 'string') continue
+      const n = Number(id.slice(id.lastIndexOf('-') + 1))
+      if (Number.isFinite(n) && n > highest) highest = n
+    }
+  }
+  idCounter = highest
+}
 const now = () => new Date().toISOString()
 
 /**
@@ -477,6 +502,8 @@ export async function hydrateSiteState(): Promise<void> {
       for (const key of Object.keys(store)) {
         if (key in saved) store[key] = saved[key]
       }
+      // The loaded rows carry ids this session's counter knows nothing about.
+      reseedIdCounter()
     } else {
       await persistState()
     }
@@ -881,7 +908,11 @@ export const bookingsApi = {
       if (clash) {
         throw new ApiError('This participant already has an appointment at that time.', 'duplicate')
       }
-      const record: Appointment = { ...input, id: nextId('APT'), createdAt: now() }
+      // `BKG`, not `APT`: a booking and an appointment template are different
+      // records in different collections, and giving both the same prefix made
+      // an id ambiguous to read and impossible to tell apart in a log. The
+      // seeded bookings already use this prefix.
+      const record: Appointment = { ...input, id: nextId('BKG'), createdAt: now() }
       db.bookings.push(record)
       return clone(record)
     }),

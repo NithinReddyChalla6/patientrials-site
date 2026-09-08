@@ -1,5 +1,5 @@
 import * as React from 'react'
-import { CalendarClock, Plus, Trash2, Video } from 'lucide-react'
+import { CalendarClock, Pencil, Plus, Trash2, Video } from 'lucide-react'
 import { appointmentsApi, siteApi } from '@/data/api'
 import type { AppointmentTemplate, Frequency, ScheduleType } from '@/data/types'
 import { useAsync } from '@/lib/use-async'
@@ -61,6 +61,8 @@ export function AppointmentsTab() {
   const state = useAsync(() => appointmentsApi.list(study.id), [study.id])
   const people = useAsync(() => siteApi.lookupPeople(), [])
   const [dialogOpen, setDialogOpen] = React.useState(false)
+  // The template the dialog is editing. Null means it is adding a new one.
+  const [editTarget, setEditTarget] = React.useState<AppointmentTemplate | null>(null)
   const [removeTarget, setRemoveTarget] = React.useState<AppointmentTemplate | null>(null)
   const [busy, setBusy] = React.useState(false)
 
@@ -98,7 +100,10 @@ export function AppointmentsTab() {
           </p>
         </div>
         {canManage && (
-          <Button variant="outline" size="sm" onClick={() => setDialogOpen(true)}>
+          <Button variant="outline" size="sm" onClick={() => {
+                  setEditTarget(null)
+                  setDialogOpen(true)
+                }}>
             <Plus aria-hidden="true" />
             Add template
           </Button>
@@ -121,7 +126,10 @@ export function AppointmentsTab() {
               description="Add the visits this protocol requires so participants are scheduled automatically when they enrol."
               action={
                 canManage && (
-                  <Button variant="brand" onClick={() => setDialogOpen(true)}>
+                  <Button variant="brand" onClick={() => {
+                  setEditTarget(null)
+                  setDialogOpen(true)
+                }}>
                     <Plus aria-hidden="true" />
                     Add template
                   </Button>
@@ -164,15 +172,29 @@ export function AppointmentsTab() {
                 </div>
 
                 {canManage && (
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    className="shrink-0 text-muted-foreground hover:text-destructive"
-                    onClick={() => setRemoveTarget(template)}
-                    aria-label={`Remove ${template.name}`}
-                  >
-                    <Trash2 aria-hidden="true" />
-                  </Button>
+                  <div className="flex shrink-0 items-center">
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="text-muted-foreground hover:text-foreground"
+                      onClick={() => {
+                        setEditTarget(template)
+                        setDialogOpen(true)
+                      }}
+                      aria-label={`Edit ${template.name}`}
+                    >
+                      <Pencil aria-hidden="true" />
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="text-muted-foreground hover:text-destructive"
+                      onClick={() => setRemoveTarget(template)}
+                      aria-label={`Remove ${template.name}`}
+                    >
+                      <Trash2 aria-hidden="true" />
+                    </Button>
+                  </div>
                 )}
               </li>
             ))}
@@ -182,7 +204,11 @@ export function AppointmentsTab() {
 
       <TemplateDialog
         open={dialogOpen}
-        onOpenChange={setDialogOpen}
+        onOpenChange={(open) => {
+          setDialogOpen(open)
+          if (!open) setEditTarget(null)
+        }}
+        template={editTarget}
         studyId={study.id}
         people={(people.data ?? []).map((p) => ({
           value: p.id,
@@ -191,6 +217,7 @@ export function AppointmentsTab() {
         }))}
         onSaved={() => {
           setDialogOpen(false)
+          setEditTarget(null)
           state.reload()
         }}
       />
@@ -214,15 +241,27 @@ export function AppointmentsTab() {
   )
 }
 
+/**
+ * Adds a template, or edits one in place.
+ *
+ * Editing rather than delete-and-recreate matters: bookings point at a
+ * template by id, so recreating one silently unhooks every visit already
+ * tagged to it. Correcting a window — the reason most edits happen, since
+ * templates written before windows existed have none — must not cost a study
+ * its compliance history.
+ */
 function TemplateDialog({
   open,
   onOpenChange,
+  template,
   studyId,
   people,
   onSaved,
 }: {
   open: boolean
   onOpenChange: (open: boolean) => void
+  /** The template being edited, or null when adding a new one. */
+  template: AppointmentTemplate | null
   studyId: string
   people: { value: string; label: string; description?: string }[]
   onSaved: () => void
@@ -242,7 +281,7 @@ function TemplateDialog({
       windowDays: all(required('Window'), inRange(0, 30, 'Window')),
     },
     onSubmit: async (values) => {
-      await appointmentsApi.create({
+      const fields = {
         studyId,
         name: values.name,
         assignedToId,
@@ -252,29 +291,47 @@ function TemplateDialog({
         day: values.day,
         hours: values.hours,
         windowDays: Number(values.windowDays),
-      })
-      toast.success('Appointment template added')
+      }
+      if (template) {
+        await appointmentsApi.update(template.id, fields)
+        toast.success('Appointment template updated')
+      } else {
+        await appointmentsApi.create(fields)
+        toast.success('Appointment template added')
+      }
       onSaved()
     },
   })
 
   React.useEffect(() => {
     if (!open) return
-    form.reset({ name: '', week: '1', day: '1', hours: '09', windowDays: '0' })
-    setAssignedToId(undefined)
-    setScheduleType('In person')
-    setFrequency('One time')
+    form.reset({
+      name: template?.name ?? '',
+      week: template?.week ?? '1',
+      day: template?.day ?? '1',
+      hours: template?.hours ?? '09',
+      // A template from before windows existed has none, which behaves as zero.
+      // Showing the zero is honest about what it is currently doing.
+      windowDays: String(template?.windowDays ?? 0),
+    })
+    setAssignedToId(template?.assignedToId)
+    setScheduleType(template?.scheduleType ?? 'In person')
+    setFrequency(template?.frequency ?? 'One time')
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [open])
+  }, [open, template])
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent>
         <form onSubmit={form.submit} noValidate>
           <DialogHeader>
-            <DialogTitle>Add an appointment template</DialogTitle>
+            <DialogTitle>
+              {template ? 'Edit appointment template' : 'Add an appointment template'}
+            </DialogTitle>
             <DialogDescription>
-              Every participant who enrols on this study gets this visit scheduled automatically.
+              {template
+                ? 'Changes apply to every participant on this study, including visits already booked against it.'
+                : 'Every participant who enrols on this study gets this visit scheduled automatically.'}
             </DialogDescription>
           </DialogHeader>
 
@@ -402,7 +459,7 @@ function TemplateDialog({
               Cancel
             </Button>
             <Button type="submit" variant="brand" loading={form.submitting}>
-              Add template
+              {template ? 'Save changes' : 'Add template'}
             </Button>
           </DialogFooter>
         </form>
