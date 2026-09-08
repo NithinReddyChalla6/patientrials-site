@@ -7,6 +7,20 @@ import { APPOINTMENT_SLOTS } from '@/data/reference'
 import { formatDate } from '@/lib/format'
 import { Button } from '@/components/ui/button'
 
+/**
+ * The date with its weekday.
+ *
+ * A model asked for "next Tuesday" has returned a Saturday. The confirm step
+ * only helps if the mistake is visible in it, and "Sep 12, 2026" is not — the
+ * reader would have to know the calendar. "Saturday" beside it is checkable at
+ * a glance.
+ */
+function withWeekday(iso: string): string {
+  const d = new Date(`${iso}T00:00:00`)
+  if (Number.isNaN(d.getTime())) return iso
+  return `${d.toLocaleDateString(undefined, { weekday: 'long' })}, ${formatDate(iso)}`
+}
+
 /** What a proposal turns into once it has been matched against the records. */
 interface Resolved {
   subject: Subject
@@ -159,7 +173,7 @@ export function BookingCard({
         timeSlot: resolved.timeSlot,
         locationId: resolved.locationId,
       })
-      const summary = `Booked ${resolved.subject.firstName} ${resolved.subject.lastName} for ${formatDate(resolved.date)} at ${resolved.timeSlot}.`
+      const summary = `Booked ${resolved.subject.firstName} ${resolved.subject.lastName} for ${withWeekday(resolved.date)} at ${resolved.timeSlot}.`
       setDone(summary)
       onBooked(summary)
     } catch (err) {
@@ -213,7 +227,7 @@ export function BookingCard({
           }
         />
         <Line label="Visit" value={resolved.template?.name ?? 'Not a protocol visit'} />
-        <Line label="When" value={`${formatDate(resolved.date)}, ${resolved.timeSlot}`} />
+        <Line label="When" value={`${withWeekday(resolved.date)} at ${resolved.timeSlot}`} />
         {resolved.locationName && <Line label="Where" value={resolved.locationName} />}
       </div>
 

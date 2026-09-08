@@ -302,9 +302,17 @@ app.post('/api/assistant', async (req, res) => {
 
   const system = [
     ASSISTANT_SYSTEM,
+    // The weekday, not just the date. Asked for "next Tuesday" from a bare
+    // 2026-09-09 the model answered 2026-09-12, a Saturday: it cannot reliably
+    // work out what day a date falls on, so it is told.
     `
 
-Today is ${new Date().toISOString().slice(0, 10)}.`,
+Today is ${new Date().toLocaleDateString('en-GB', {
+      weekday: 'long',
+      day: 'numeric',
+      month: 'long',
+      year: 'numeric',
+    })} (${new Date().toISOString().slice(0, 10)}). Work dates out from this, and check the weekday you return matches the one you were asked for.`,
     context ? `\n\nHere is what you can see right now:\n${String(context).slice(0, 6000)}` : '',
     places.length
       ? `\n\nScreens and records you may offer to open:\n${places.map((d) => `- ${d.path} — ${d.label}`).join('\n')}`
@@ -323,9 +331,31 @@ Today is ${new Date().toISOString().slice(0, 10)}.`,
         messages: [{ role: 'system', content: system }, ...recent],
         temperature: 0.6,
         max_tokens: 700,
-        ...(places.length
-          ? {
-              tools: [
+        tool_choice: 'auto',
+        tools: [
+          ...(places.length
+            ? [
+                {
+                  type: 'function',
+                  function: {
+                    name: 'open_screen',
+                    description:
+                      'Open a screen in the portal. Only paths from the list in the system message are allowed.',
+                    parameters: {
+                      type: 'object',
+                      properties: {
+                        path: {
+                          type: 'string',
+                          description: 'One of the listed paths, copied exactly.',
+                        },
+                      },
+                      required: ['path'],
+                    },
+                  },
+                },
+              ]
+            : []),
+          ...[
                 {
                   type: 'function',
                   function: {
@@ -353,28 +383,8 @@ Today is ${new Date().toISOString().slice(0, 10)}.`,
                     },
                   },
                 },
-                {
-                  type: 'function',
-                  function: {
-                    name: 'open_screen',
-                    description:
-                      'Offer to take the person to a screen in the portal. Only paths from the list in the system message are allowed.',
-                    parameters: {
-                      type: 'object',
-                      properties: {
-                        path: {
-                          type: 'string',
-                          description: 'One of the listed paths, copied exactly.',
-                        },
-                      },
-                      required: ['path'],
-                    },
-                  },
-                },
               ],
-              tool_choice: 'auto',
-            }
-          : {}),
+        ],
       }),
     })
 
