@@ -1,8 +1,7 @@
-import { NavLink, Outlet, useLocation, useOutletContext, useParams } from 'react-router-dom'
+import { Outlet, useLocation, useOutletContext, useParams } from 'react-router-dom'
 import { studiesApi } from '@/data/api'
 import type { Study } from '@/data/types'
 import { useAsync } from '@/lib/use-async'
-import { cn } from '@/lib/cn'
 import { Skeleton } from '@/components/ui/skeleton'
 import { PageHeader } from '@/components/patterns/page-header'
 import { AsyncBoundary } from '@/components/patterns/async-boundary'
@@ -86,30 +85,9 @@ export function StudyLayout() {
               }
             />
 
-            <nav aria-label="Study sections" className="border-b border-border">
-              <ul className="-mb-px flex gap-1 overflow-x-auto">
-                {tabs.map((tab) => (
-                  <li key={tab.segment || 'overview'}>
-                    <NavLink
-                      to={tab.segment ? `/studies/${study.id}/${tab.segment}` : `/studies/${study.id}`}
-                      end={tab.segment === ''}
-                      className={({ isActive }) =>
-                        cn(
-                          'inline-flex min-h-11 items-center gap-2 whitespace-nowrap border-b-2 px-3 text-sm font-medium transition-colors',
-                          isActive
-                            ? 'border-brand text-foreground'
-                            : 'border-transparent text-muted-foreground hover:border-border hover:text-foreground',
-                        )
-                      }
-                    >
-                      <tab.icon className="size-4" aria-hidden="true" />
-                      {tab.label}
-                    </NavLink>
-                  </li>
-                ))}
-              </ul>
-            </nav>
-
+            {/* The sections live in the sidebar. They were a strip here until a
+                study carried a dozen of them and it scrolled sideways, hiding
+                whichever came last behind a gesture nobody makes. */}
             <Outlet context={{ study, reload: state.reload } satisfies StudyContext} />
           </>
         )}
