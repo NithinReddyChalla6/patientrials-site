@@ -186,30 +186,45 @@ export function AppRoutes() {
             <Route path="/studies/:studyId/promote" element={<PromoteStudyPage />} />
             <Route path="/studies/:studyId" element={<StudyLayout />}>
               <Route index element={<Navigate to="participants" replace />} />
-              <Route path="overview" element={<OverviewTab />} />
               <Route path="participants" element={<ParticipantsTab />} />
-              <Route path="prospects" element={<ProspectsTab />} />
-              <Route path="pending-tasks" element={<PendingTasksTab />} />
-              <Route path="prescreening" element={<PrescreeningTab />} />
-              <Route path="forms" element={<AssignmentTab category="form" />} />
-              <Route path="surveys" element={<AssignmentTab category="survey" />} />
-              <Route path="assets" element={<StudyAssetsTab />} />
+
+              {/*
+                Guards mirror STUDY_TABS exactly. A hidden tab whose URL still
+                renders is not gated, only unadvertised — and an investigator
+                who bookmarks a page keeps reaching it after the tab goes.
+              */}
+              <Route element={<RequirePermission permission="study.setup" />}>
+                <Route path="overview" element={<OverviewTab />} />
+                <Route path="prospects" element={<ProspectsTab />} />
+                <Route path="pending-tasks" element={<PendingTasksTab />} />
+                <Route path="prescreening" element={<PrescreeningTab />} />
+                <Route path="forms" element={<AssignmentTab category="form" />} />
+                <Route path="surveys" element={<AssignmentTab category="survey" />} />
+                <Route path="notifications" element={<NotificationsTab />} />
+                <Route path="team" element={<TeamTab />} />
+              </Route>
+
               {/* Clinical work: the investigator's, not site administration. */}
+              <Route element={<RequirePermission permission="asset.manage" />}>
+                <Route path="assets" element={<StudyAssetsTab />} />
+              </Route>
               <Route element={<RequirePermission permission="medication.manage" />}>
                 <Route path="medications" element={<MedicationsTab />} />
               </Route>
               <Route element={<RequirePermission permission="query.manage" />}>
                 <Route path="queries" element={<QueriesTab />} />
               </Route>
-              <Route path="group-sessions" element={<GroupSessionsTab />} />
-              <Route path="econsents" element={<EConsentsTab />} />
-              <Route path="appointments" element={<AppointmentsTab />} />
+              <Route element={<RequirePermission permission="consent.manage" />}>
+                <Route path="econsents" element={<EConsentsTab />} />
+              </Route>
               <Route element={<RequirePermission permission="appointment.manage" />}>
+                <Route path="appointments" element={<AppointmentsTab />} />
+                <Route path="group-sessions" element={<GroupSessionsTab />} />
                 <Route path="visit-compliance" element={<VisitComplianceTab />} />
               </Route>
-              <Route path="notifications" element={<NotificationsTab />} />
-              <Route path="locations" element={<LocationsTab />} />
-              <Route path="team" element={<TeamTab />} />
+              <Route element={<RequirePermission permission="location.manage" />}>
+                <Route path="locations" element={<LocationsTab />} />
+              </Route>
             </Route>
 
             <Route path="/requests" element={<RequestsPage />} />

@@ -13,6 +13,7 @@ export type Permission =
   | 'site.edit'
   | 'site.collaborators.manage'
   | 'study.view'
+  | 'study.setup'
   | 'study.create'
   | 'study.promote'
   | 'study.assignInvestigator'
@@ -32,7 +33,24 @@ export type Permission =
   | 'query.manage'
   | 'consent.manage'
 
-const READ_ONLY: Permission[] = ['site.view', 'study.view', 'form.view']
+/**
+ * The study-administration tabs: the recruitment funnel, pre-screening, forms,
+ * notifications, approved locations and the team.
+ *
+ * Held by every role except the Principal Investigator. The legacy portal gave
+ * an investigator a deliberately narrow console — subjects, appointments,
+ * consents, medications, assets and sponsor queries — and nothing about setting
+ * a study up, because that is not their job. Without a permission of its own
+ * that distinction is impossible to express: `study.view` has to stay with the
+ * PI so they can open a study at all, and gating the setup tabs on it hands
+ * them the whole workspace.
+ *
+ * Read-only roles hold it too. It decides which console you are given, not what
+ * you may change — every tab still gates its own writes.
+ */
+const STUDY_SETUP: Permission = 'study.setup'
+
+const READ_ONLY: Permission[] = ['site.view', 'study.view', 'form.view', STUDY_SETUP]
 
 const PERMISSIONS: Record<Role, Permission[]> = {
   site_administrator: [

@@ -1,6 +1,7 @@
 import {
   Building2,
   CalendarCheck,
+  CalendarDays,
   CalendarClock,
   ClipboardCheck,
   ClipboardList,
@@ -12,6 +13,7 @@ import {
   Inbox,
   LayoutDashboard,
   Landmark,
+  MessageSquare,
   ListChecks,
   History,
   Network,
@@ -114,7 +116,16 @@ export const NAV_GROUPS: NavGroup[] = [
 export const NAV_ITEMS: NavItem[] = NAV_GROUPS.flatMap((g) => g.items)
 
 
-/** Tabs inside the study workspace, in the order a study is set up. */
+/**
+ * Tabs inside the study workspace, in the order a study is set up.
+ *
+ * Each tab is gated on the permission that names the work it does, not on a
+ * blanket `study.view`. That is what separates the two consoles: a Principal
+ * Investigator holds `appointment.manage`, `consent.manage`, `medication.manage`,
+ * `asset.manage` and `query.manage` but not `study.setup`, so this one list
+ * yields their narrow clinical view and everyone else's full workspace without
+ * a second list to keep in step.
+ */
 export interface StudyTab {
   segment: string
   label: string
@@ -124,25 +135,57 @@ export interface StudyTab {
 
 export const STUDY_TABS: StudyTab[] = [
   { segment: 'participants', label: 'Subjects', icon: Users, permission: 'study.view' },
-  { segment: 'prospects', label: 'Study Prospects', icon: UserSearch, permission: 'study.view' },
-  { segment: 'overview', label: 'Overview', icon: LayoutDashboard },
-  { segment: 'prescreening', label: 'Pre-screening', icon: ListChecks, permission: 'study.view' },
-  { segment: 'forms', label: 'Forms', icon: FileText, permission: 'form.view' },
-  { segment: 'surveys', label: 'Surveys', icon: ClipboardList, permission: 'form.view' },
-  { segment: 'assets', label: 'Study Assets', icon: FolderOpen, permission: 'study.view' },
+  { segment: 'prospects', label: 'Study Prospects', icon: UserSearch, permission: 'study.setup' },
+  { segment: 'overview', label: 'Overview', icon: LayoutDashboard, permission: 'study.setup' },
+  { segment: 'prescreening', label: 'Pre-screening', icon: ListChecks, permission: 'study.setup' },
+  { segment: 'forms', label: 'Forms', icon: FileText, permission: 'study.setup' },
+  { segment: 'surveys', label: 'Surveys', icon: ClipboardList, permission: 'study.setup' },
+  { segment: 'assets', label: 'Study Assets', icon: FolderOpen, permission: 'asset.manage' },
   { segment: 'medications', label: 'Medications', icon: Pill, permission: 'medication.manage' },
-  { segment: 'econsents', label: 'Consent Documents', icon: FileSignature, permission: 'study.view' },
-  { segment: 'appointments', label: 'Appointment Templates', icon: CalendarClock, permission: 'study.view' },
+  {
+    segment: 'econsents',
+    label: 'Consent Documents',
+    icon: FileSignature,
+    permission: 'consent.manage',
+  },
+  {
+    segment: 'appointments',
+    label: 'Appointment Templates',
+    icon: CalendarClock,
+    permission: 'appointment.manage',
+  },
+  {
+    segment: 'group-sessions',
+    label: 'Group Appointments',
+    icon: CalendarDays,
+    permission: 'appointment.manage',
+  },
   {
     segment: 'visit-compliance',
     label: 'Visit Compliance',
     icon: CalendarCheck,
     permission: 'appointment.manage',
   },
-  { segment: 'notifications', label: 'Notifications', icon: Inbox, permission: 'study.view' },
-  { segment: 'pending-tasks', label: 'Pending Tasks', icon: ClipboardCheck, permission: 'study.view' },
-  { segment: 'locations', label: 'Approved Locations', icon: Building2, permission: 'study.view' },
-  { segment: 'team', label: 'Team', icon: Users, permission: 'study.view' },
+  {
+    segment: 'queries',
+    label: 'Query with Sponsor',
+    icon: MessageSquare,
+    permission: 'query.manage',
+  },
+  { segment: 'notifications', label: 'Notifications', icon: Inbox, permission: 'study.setup' },
+  {
+    segment: 'pending-tasks',
+    label: 'Pending Tasks',
+    icon: ClipboardCheck,
+    permission: 'study.setup',
+  },
+  {
+    segment: 'locations',
+    label: 'Approved Locations',
+    icon: Building2,
+    permission: 'location.manage',
+  },
+  { segment: 'team', label: 'Team', icon: Users, permission: 'study.setup' },
 ]
 
 /** Site profile tabs, addressable so the sidebar can deep-link into each one. */
