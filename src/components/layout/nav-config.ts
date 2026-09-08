@@ -158,7 +158,7 @@ export const STUDY_TABS: StudyTab[] = [
     segment: 'group-sessions',
     label: 'Group Appointments',
     icon: CalendarDays,
-    permission: 'appointment.manage',
+    permission: 'session.manage',
   },
   {
     segment: 'visit-compliance',

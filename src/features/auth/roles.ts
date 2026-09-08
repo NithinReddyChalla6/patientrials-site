@@ -26,6 +26,7 @@ export type Permission =
   | 'form.publish'
   | 'form.assign'
   | 'appointment.manage'
+  | 'session.manage'
   | 'notification.manage'
   | 'location.manage'
   | 'asset.manage'
@@ -86,6 +87,7 @@ const PERMISSIONS: Record<Role, Permission[]> = {
     'form.publish',
     'form.assign',
     'appointment.manage',
+    'session.manage',
     'notification.manage',
     'location.manage',
     'asset.manage',
@@ -103,6 +105,7 @@ const PERMISSIONS: Record<Role, Permission[]> = {
     'prescreening.manage',
     'form.assign',
     'appointment.manage',
+    'session.manage',
     'notification.manage',
     'study.request.respond',
     'asset.manage',

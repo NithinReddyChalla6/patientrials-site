@@ -33,7 +33,7 @@ export function GroupSessionsTab() {
   const { study } = useStudy()
   const { can } = useAuth()
   const toast = useToast()
-  const canManage = can('appointment.manage')
+  const canManage = can('session.manage')
 
   const state = useAsync(() => groupSessionsApi.list(study.id), [study.id])
   const locations = useAsync(() => locationsApi.list(study.id), [study.id])

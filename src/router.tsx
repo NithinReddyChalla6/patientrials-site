@@ -217,9 +217,11 @@ export function AppRoutes() {
               <Route element={<RequirePermission permission="consent.manage" />}>
                 <Route path="econsents" element={<EConsentsTab />} />
               </Route>
+              <Route element={<RequirePermission permission="session.manage" />}>
+                <Route path="group-sessions" element={<GroupSessionsTab />} />
+              </Route>
               <Route element={<RequirePermission permission="appointment.manage" />}>
                 <Route path="appointments" element={<AppointmentsTab />} />
-                <Route path="group-sessions" element={<GroupSessionsTab />} />
                 <Route path="visit-compliance" element={<VisitComplianceTab />} />
               </Route>
               <Route element={<RequirePermission permission="location.manage" />}>
