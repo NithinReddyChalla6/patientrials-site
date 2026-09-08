@@ -15,15 +15,25 @@ export interface ChatTurn {
  * Names and contact details are not included — a question about "who is
  * overdue" is answerable from counts, and the screens already show the people.
  */
-export function studySummary(study: Study, subjects: Subject[]): string {
+export function studySummary(
+  study: Study,
+  subjects: Subject[],
+  investigatorName?: string,
+): string {
   const count = (status: Subject['status']) => subjects.filter((s) => s.status === status).length
 
   return [
     `Study ${study.id} (${study.nctId}): ${study.title}`,
     `Condition: ${study.condition}. Phase: ${study.phase}. Sponsor: ${study.sponsor}.`,
     `Status: ${study.status}, recruitment ${study.recruitmentStatus}.`,
-    `Enrolment target ${study.enrollmentTarget}, currently enrolled ${study.enrolled}.`,
-    `Participants on this study: ${subjects.length} in total — ` +
+    `Principal investigator: ${investigatorName ?? 'none assigned'}.`,
+    `Enrolment target: ${study.enrollmentTarget}.`,
+    // Two numbers claim to be "enrolled" and they do not always agree: the
+    // study record's own counter, and how many participants currently sit at
+    // status recruited. Naming both separately is the only way the assistant
+    // can report one without implying the other.
+    `Enrolment counter on the study record: ${study.enrolled}.`,
+    `Participant records on this study: ${subjects.length} in total — ` +
       `${count('pending')} new, ${count('validated')} validated, ` +
       `${count('prescreened')} pre-screened, ${count('recruited')} recruited, ` +
       `${count('rejected')} rejected, ${count('dropped')} dropped.`,
@@ -40,15 +50,20 @@ export function studySummary(study: Study, subjects: Subject[]): string {
  * are we recruiting for" or "which one is behind" without naming a single
  * participant.
  */
-export function siteSummary(studies: Study[]): string {
+export function siteSummary(studies: Study[], investigators: Map<string, string>): string {
   if (studies.length === 0) return 'This site has no studies yet.'
-  const lines = studies.map(
-    (s) =>
+  const lines = studies.map((s) => {
+    // Staff names, not participants'. Who runs a study is among the first
+    // things anyone asks, and without this the assistant could not answer it.
+    const pi = s.principalInvestigatorId
+      ? (investigators.get(s.principalInvestigatorId) ?? 'assigned, name unavailable')
+      : 'none assigned'
+    return (
       `- ${s.id} (${s.nctId}): ${s.title}. ${s.condition}, ${s.phase}, sponsor ${s.sponsor}. ` +
-      `Status ${s.status}, recruitment ${s.recruitmentStatus}, ` +
-      `enrolled ${s.enrolled} of ${s.enrollmentTarget}.` +
-      (s.principalInvestigatorId ? '' : ' No investigator assigned.'),
-  )
+      `Status ${s.status}, recruitment ${s.recruitmentStatus}. ` +
+      `Investigator: ${pi}. Enrolment counter ${s.enrolled} of target ${s.enrollmentTarget}.`
+    )
+  })
   return [`This site has ${studies.length} studies.`, ...lines].join('\n')
 }
 

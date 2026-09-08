@@ -1,7 +1,7 @@
 import * as React from 'react'
 import { useLocation } from 'react-router-dom'
 import { Bot, Send, Sparkles, X } from 'lucide-react'
-import { studiesApi, subjectsApi, ApiError } from '@/data/api'
+import { siteApi, studiesApi, subjectsApi, ApiError } from '@/data/api'
 import { ask, siteSummary, studySummary, type ChatTurn } from '@/data/assistant'
 import { Textarea } from '@/components/ui/textarea'
 import { Button } from '@/components/ui/button'
@@ -97,15 +97,23 @@ export function AssistantDock() {
    */
   async function contextNow(): Promise<string> {
     try {
+      // Staff, so an investigator can be named rather than left as an id.
+      const staff = await siteApi.listCollaborators()
+      const names = new Map(staff.map((m) => [m.id, `${m.firstName} ${m.lastName}`]))
+
       if (studyId) {
         const [study, page] = await Promise.all([
           studiesApi.get(studyId),
           subjectsApi.list({ studyId, status: 'all', page: 1, pageSize: 200 }),
         ])
-        return studySummary(study, page.items)
+        return studySummary(
+          study,
+          page.items,
+          study.principalInvestigatorId ? names.get(study.principalInvestigatorId) : undefined,
+        )
       }
       const studies = await studiesApi.list({ status: 'all', page: 1, pageSize: 50 })
-      return siteSummary(studies.items)
+      return siteSummary(studies.items, names)
     } catch {
       // A question is still worth answering without the numbers; the assistant
       // is told to say when it cannot see something.
