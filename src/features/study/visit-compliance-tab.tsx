@@ -85,11 +85,16 @@ function fullName(subject: Subject) {
 /** One cell of the grid: a dot a sighted reader scans, a sentence a screen reader hears. */
 function VisitCell({ visit, subject }: { visit: Visit; subject: Subject }) {
   const { label, icon: Icon, text } = STATE[visit.state]
-  const when = visit.booking
-    ? `booked ${formatDate(visit.booking.date)}`
-    : visit.dueOn
-      ? `due ${formatDate(visit.dueOn)}`
-      : 'no due date'
+  // An off-schedule visit is the one case where both dates matter: knowing it
+  // happened on the 11th is useless without knowing it was due on the 3rd.
+  const when =
+    visit.state === 'deviation' && visit.booking
+      ? `happened ${formatDate(visit.booking.date)}, was due ${formatDate(visit.dueOn)}`
+      : visit.booking
+        ? `booked ${formatDate(visit.booking.date)}`
+        : visit.dueOn
+          ? `due ${formatDate(visit.dueOn)}`
+          : 'no due date'
 
   return (
     <td className="border-l border-border px-3 py-2 text-center align-middle">
@@ -153,6 +158,11 @@ export function VisitComplianceTab() {
         const every = rows.flatMap((r) => r.visits)
         const count = (state: VisitState) => every.filter((v) => v.state === state).length
         const undated = subjects.filter((s) => !s.recruitedAt).length
+        // A template written before windows existed has none, which reads as
+        // zero tolerance: the visit has to land on the exact due day or it is a
+        // deviation. That is a real protocol possibility but almost never the
+        // intent, so say so rather than let the grid look wrong.
+        const windowless = schedule.filter((t) => t.windowDays === undefined)
 
         // Worst first, so the top of the list is the work that matters most.
         const attention = rows
@@ -232,6 +242,15 @@ export function VisitComplianceTab() {
                   />
                 </div>
 
+                {windowless.length > 0 && (
+                  <Alert tone="warning" title="Some visits allow no leeway at all">
+                    {windowless.length === 1
+                      ? `"${windowless[0].name}" has no window set, so it counts as off schedule unless it happens on its exact due day.`
+                      : `${windowless.length} visits have no window set, so each counts as off schedule unless it happens on its exact due day.`}{' '}
+                    Set a window on the appointment template to match what the protocol allows.
+                  </Alert>
+                )}
+
                 {undated > 0 && (
                   <Alert tone="warning" title="Some schedules cannot be worked out">
                     {undated === 1
@@ -279,7 +298,7 @@ export function VisitComplianceTab() {
                                     {visit.template.name}
                                     <span className="text-muted-foreground">
                                       {visit.state === 'deviation' && visit.booking
-                                        ? `${STATE.deviation.label.toLowerCase()} — happened ${formatDate(visit.booking.date)}`
+                                        ? `happened ${formatDate(visit.booking.date)}, was due ${formatDate(visit.dueOn)}`
                                         : `${STATE[visit.state].label.toLowerCase()} — due ${formatDate(visit.dueOn)}`}
                                     </span>
                                   </span>
