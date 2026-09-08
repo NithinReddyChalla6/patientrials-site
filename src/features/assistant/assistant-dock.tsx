@@ -6,12 +6,14 @@ import {
   ask,
   siteSummary,
   studySummary,
+  type BookingProposal,
   type ChatTurn,
   type Destination,
 } from '@/data/assistant'
 import { Textarea } from '@/components/ui/textarea'
 import { Button } from '@/components/ui/button'
 import { Alert } from '@/components/ui/alert'
+import { BookingCard } from './booking-card'
 import { useDictation } from '@/lib/use-dictation'
 import { NAV_GROUPS, STUDY_TABS } from '@/components/layout/nav-config'
 import { useAuth } from '@/features/auth/auth-context'
@@ -29,9 +31,20 @@ function studyIdFrom(pathname: string): string | undefined {
 
 interface Shown extends ChatTurn {
   goTo?: Destination
+  proposal?: BookingProposal
 }
 
-function Bubble({ turn }: { turn: Shown }) {
+function Bubble({
+  turn,
+  studyId,
+  bookedBy,
+  onBooked,
+}: {
+  turn: Shown
+  studyId?: string
+  bookedBy: string
+  onBooked: (summary: string) => void
+}) {
   const mine = turn.role === 'user'
   return (
     <li className={mine ? 'flex justify-end' : 'flex gap-2'}>
@@ -58,6 +71,14 @@ function Bubble({ turn }: { turn: Shown }) {
             <ArrowRight className="size-3.5 shrink-0" aria-hidden="true" />
             Opened {turn.goTo.label}
           </span>
+        )}
+        {turn.proposal && (
+          <BookingCard
+            proposal={turn.proposal}
+            studyId={studyId}
+            bookedBy={bookedBy}
+            onBooked={onBooked}
+          />
         )}
       </div>
     </li>
@@ -203,7 +224,15 @@ export function AssistantDock() {
     try {
       const [context, places] = await Promise.all([contextNow(), destinationsNow()])
       const answer = await ask(next, context, places)
-      setTurns([...next, { role: 'assistant', content: answer.reply, goTo: answer.goTo }])
+      setTurns([
+        ...next,
+        {
+          role: 'assistant',
+          content: answer.reply,
+          goTo: answer.goTo,
+          proposal: answer.proposal,
+        },
+      ])
       // Asked to open something, open it. The panel stays put, so the
       // conversation survives the move and the browser's back button undoes it.
       if (answer.goTo) navigate(answer.goTo.path)
@@ -221,6 +250,7 @@ export function AssistantDock() {
   const dictation = useDictation(React.useCallback((said) => void sendRef.current(said), []))
 
   const firstName = session?.user.firstName ?? 'there'
+  const fullName = session ? `${session.user.firstName} ${session.user.lastName}` : 'Study team'
   const starters = studyId ? STARTERS_STUDY : STARTERS_SITE
 
   return (
@@ -293,7 +323,15 @@ export function AssistantDock() {
             ) : (
               <ul className="space-y-3">
                 {turns.map((turn, i) => (
-                  <Bubble key={`${turn.role}-${i}`} turn={turn} />
+                  <Bubble
+                    key={`${turn.role}-${i}`}
+                    turn={turn}
+                    studyId={studyId}
+                    bookedBy={fullName}
+                    onBooked={(summary) =>
+                      setTurns((prev) => [...prev, { role: 'assistant', content: summary }])
+                    }
+                  />
                 ))}
                 {thinking && (
                   <li className="flex gap-2">

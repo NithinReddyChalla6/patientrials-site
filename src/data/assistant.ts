@@ -74,10 +74,27 @@ export function siteSummary(studies: Study[], investigators: Map<string, string>
  * Goes to our own server, never to the model provider: the API key lives there,
  * and a key shipped to the browser is a key anyone can read.
  */
+/**
+ * A booking the assistant heard, in the words it heard them.
+ *
+ * Names, not ids: the assistant is never shown the participant list, so it can
+ * only repeat back what the person typed. Turning "Maya" into a record is done
+ * here, against the real data, where a wrong guess can be caught.
+ */
+export interface BookingProposal {
+  participant: string
+  visit?: string
+  /** ISO `yyyy-mm-dd`. */
+  date: string
+  time?: string
+}
+
 export interface Answer {
   reply: string
   /** Where it offered to take you, if anywhere. */
   goTo?: Destination
+  /** What it understood you wanted booked, before anyone agrees to it. */
+  proposal?: BookingProposal
 }
 
 export async function ask(
@@ -102,6 +119,7 @@ export async function ask(
   const body = (await res.json().catch(() => ({}))) as {
     reply?: string
     navigateTo?: string
+    proposal?: BookingProposal
     error?: string
   }
   if (!res.ok) throw new ApiError(body.error ?? 'The assistant could not answer.', 'network')
@@ -112,5 +130,5 @@ export async function ask(
   // or to one this person is not allowed to open.
   const goTo = destinations.find((d) => d.path === body.navigateTo)
 
-  return { reply: body.reply, goTo }
+  return { reply: body.reply, goTo, proposal: body.proposal }
 }

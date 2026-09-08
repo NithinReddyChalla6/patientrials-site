@@ -257,8 +257,9 @@ How to format:
 What you can actually do, if asked:
 - Answer questions about the studies you are shown: status, recruitment, targets, who the investigator is, how many participants sit at each stage.
 - Explain what those numbers mean and which look worth attention.
-- Offer to open a screen. When someone asks to see or go to something, call the open_screen tool with one of the paths you were given, and write your usual short reply as well. They get a button and decide whether to follow it.
-You cannot change anything, book visits, or see individual participants. Say so plainly rather than implying otherwise.
+- Open a screen. When someone asks to see or go to something, call the open_screen tool with one of the paths you were given, and write your usual short reply as well.
+- Propose booking a visit. When someone asks to book, schedule or arrange an appointment, call propose_booking with what they said. Repeat their words back — the participant as they named them, the visit as they named it. Work out the date from today's date, given below, and return it as YYYY-MM-DD. Do not invent a participant or a visit they did not mention. Nothing is booked by this: they are shown what you understood and decide whether it happens, so say what you are proposing in your reply.
+You cannot see individual participants, and you never change anything yourself — a booking only happens if the person confirms it. Say so plainly rather than implying otherwise.
 
 Only ever pass a path from the list you were given, copied exactly. Never invent one. If nothing in the list fits, say where they would find it and do not call the tool.
 
@@ -301,6 +302,9 @@ app.post('/api/assistant', async (req, res) => {
 
   const system = [
     ASSISTANT_SYSTEM,
+    `
+
+Today is ${new Date().toISOString().slice(0, 10)}.`,
     context ? `\n\nHere is what you can see right now:\n${String(context).slice(0, 6000)}` : '',
     places.length
       ? `\n\nScreens and records you may offer to open:\n${places.map((d) => `- ${d.path} — ${d.label}`).join('\n')}`
@@ -322,6 +326,33 @@ app.post('/api/assistant', async (req, res) => {
         ...(places.length
           ? {
               tools: [
+                {
+                  type: 'function',
+                  function: {
+                    name: 'propose_booking',
+                    description:
+                      'Propose an appointment for someone to confirm. Books nothing on its own.',
+                    parameters: {
+                      type: 'object',
+                      properties: {
+                        participant: {
+                          type: 'string',
+                          description: 'The participant as the person named them.',
+                        },
+                        visit: {
+                          type: 'string',
+                          description: 'The protocol visit as they named it, if they named one.',
+                        },
+                        date: { type: 'string', description: 'YYYY-MM-DD.' },
+                        time: {
+                          type: 'string',
+                          description: 'A time such as "10:00 AM", if they gave one.',
+                        },
+                      },
+                      required: ['participant', 'date'],
+                    },
+                  },
+                },
                 {
                   type: 'function',
                   function: {
@@ -367,27 +398,42 @@ app.post('/api/assistant', async (req, res) => {
     // rather than becoming a button to a page that does not exist — or to one
     // this person has no permission to open.
     let navigateTo
+    let proposal
     for (const call of message?.tool_calls ?? []) {
-      if (call?.function?.name !== 'open_screen') continue
-      let wanted
+      let args
       try {
-        wanted = JSON.parse(call.function.arguments || '{}').path
+        args = JSON.parse(call?.function?.arguments || '{}')
       } catch {
         continue
       }
-      if (places.some((d) => d.path === wanted)) {
-        navigateTo = wanted
-        break
+
+      if (call.function.name === 'open_screen') {
+        if (places.some((d) => d.path === args.path)) {
+          navigateTo = args.path
+          continue
+        }
+        console.warn('[assistant] ignored a path that was never offered:', args.path)
       }
-      console.warn('[assistant] ignored a path that was never offered:', wanted)
+
+      // Passed on as written. Turning a name into a participant needs the
+      // records, and those are in the browser — which is also the only place
+      // that can tell whether the person meant anyone real.
+      if (call.function.name === 'propose_booking' && args.participant && args.date) {
+        proposal = {
+          participant: String(args.participant).slice(0, 120),
+          visit: args.visit ? String(args.visit).slice(0, 120) : undefined,
+          date: String(args.date).slice(0, 10),
+          time: args.time ? String(args.time).slice(0, 20) : undefined,
+        }
+      }
     }
 
     // Some models answer with a tool call and no prose. A bare button reads as
     // the assistant having said nothing, so give it a sentence.
-    const text = reply || (navigateTo ? 'Here you go.' : '')
+    const text = reply || (navigateTo ? 'Here you go.' : proposal ? 'Here is what I understood.' : '')
     if (!text) return res.status(502).json({ error: 'The assistant returned nothing.' })
 
-    res.json({ reply: text, navigateTo })
+    res.json({ reply: text, navigateTo, proposal })
   } catch (err) {
     console.error('[assistant] request failed', err)
     res.status(502).json({ error: 'The assistant could not be reached.' })
