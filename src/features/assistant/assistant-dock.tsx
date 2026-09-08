@@ -31,7 +31,7 @@ interface Shown extends ChatTurn {
   goTo?: Destination
 }
 
-function Bubble({ turn, onGo }: { turn: Shown; onGo: (d: Destination) => void }) {
+function Bubble({ turn }: { turn: Shown }) {
   const mine = turn.role === 'user'
   return (
     <li className={mine ? 'flex justify-end' : 'flex gap-2'}>
@@ -52,16 +52,12 @@ function Bubble({ turn, onGo }: { turn: Shown; onGo: (d: Destination) => void })
       >
         <p className="whitespace-pre-wrap">{turn.content}</p>
         {turn.goTo && (
-          // Offered, not taken. Jumping the page out from under someone who is
-          // mid-sentence is worse than the extra click.
-          <button
-            type="button"
-            onClick={() => onGo(turn.goTo!)}
-            className="mt-2 inline-flex items-center gap-1.5 rounded-full border border-brand/30 bg-card px-3 py-1 text-xs font-medium text-brand transition-colors hover:bg-accent/40"
-          >
-            Open {turn.goTo.label}
-            <ArrowRight className="size-3.5" aria-hidden="true" />
-          </button>
+          // Past tense: the move has already happened. A button here would ask
+          // someone to confirm the thing they just asked for.
+          <span className="mt-1.5 flex items-center gap-1.5 text-xs opacity-80">
+            <ArrowRight className="size-3.5 shrink-0" aria-hidden="true" />
+            Opened {turn.goTo.label}
+          </span>
         )}
       </div>
     </li>
@@ -208,6 +204,9 @@ export function AssistantDock() {
       const [context, places] = await Promise.all([contextNow(), destinationsNow()])
       const answer = await ask(next, context, places)
       setTurns([...next, { role: 'assistant', content: answer.reply, goTo: answer.goTo }])
+      // Asked to open something, open it. The panel stays put, so the
+      // conversation survives the move and the browser's back button undoes it.
+      if (answer.goTo) navigate(answer.goTo.path)
     } catch (err) {
       setError(err instanceof ApiError ? err.message : 'The assistant could not answer.')
     } finally {
@@ -294,11 +293,7 @@ export function AssistantDock() {
             ) : (
               <ul className="space-y-3">
                 {turns.map((turn, i) => (
-                  <Bubble
-                    key={`${turn.role}-${i}`}
-                    turn={turn}
-                    onGo={(d) => navigate(d.path)}
-                  />
+                  <Bubble key={`${turn.role}-${i}`} turn={turn} />
                 ))}
                 {thinking && (
                   <li className="flex gap-2">
