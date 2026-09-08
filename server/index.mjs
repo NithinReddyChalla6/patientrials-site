@@ -294,6 +294,22 @@ const WEEKDAYS = [
  * beside the date, so the reader settles any genuine ambiguity rather than a
  * rule nobody agreed on.
  */
+/**
+ * Today, as the person asking sees it.
+ *
+ * This service runs on UTC. At 23:00 UTC someone an hour ahead is already on
+ * the next day, so resolving "tomorrow" against the server's clock books their
+ * visit a day early. The browser sends its own date and it is used when it
+ * looks like one.
+ */
+function readerToday(sent) {
+  if (typeof sent === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(sent)) {
+    const d = new Date(`${sent}T12:00:00`)
+    if (!Number.isNaN(d.getTime())) return d
+  }
+  return new Date()
+}
+
 function dateFromPhrase(text, today = new Date()) {
   const said = String(text ?? '').toLowerCase()
   const at = (d) => d.toISOString().slice(0, 10)
@@ -333,7 +349,7 @@ app.post('/api/assistant', async (req, res) => {
     })
   }
 
-  const { messages, context, destinations } = req.body ?? {}
+  const { messages, context, destinations, today } = req.body ?? {}
   if (!Array.isArray(messages) || messages.length === 0) {
     return res.status(400).json({ error: 'Nothing to answer.' })
   }
@@ -359,12 +375,12 @@ app.post('/api/assistant', async (req, res) => {
     // work out what day a date falls on, so it is told.
     `
 
-Today is ${new Date().toLocaleDateString('en-GB', {
+Today is ${readerToday(today).toLocaleDateString('en-GB', {
       weekday: 'long',
       day: 'numeric',
       month: 'long',
       year: 'numeric',
-    })} (${new Date().toISOString().slice(0, 10)}). Work dates out from this, and check the weekday you return matches the one you were asked for.`,
+    })} (${readerToday(today).toISOString().slice(0, 10)}). Work dates out from this, and check the weekday you return matches the one you were asked for.`,
     context ? `\n\nHere is what you can see right now:\n${String(context).slice(0, 6000)}` : '',
     places.length
       ? `\n\nScreens and records you may offer to open:\n${places.map((d) => `- ${d.path} — ${d.label}`).join('\n')}`
@@ -487,7 +503,7 @@ Today is ${new Date().toLocaleDateString('en-GB', {
         proposal = {
           participant: String(args.participant).slice(0, 120),
           visit: args.visit ? String(args.visit).slice(0, 120) : undefined,
-          date: dateFromPhrase(asked) ?? String(args.date).slice(0, 10),
+          date: dateFromPhrase(asked, readerToday(today)) ?? String(args.date).slice(0, 10),
           time: args.time ? String(args.time).slice(0, 20) : undefined,
         }
       }

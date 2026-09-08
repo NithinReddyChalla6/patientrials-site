@@ -89,6 +89,14 @@ export interface BookingProposal {
   time?: string
 }
 
+const pad2 = (n: number) => String(n).padStart(2, '0')
+
+/** Today where the reader is, as `yyyy-mm-dd`. */
+function localDate(): string {
+  const d = new Date()
+  return `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`
+}
+
 export interface Answer {
   reply: string
   /** Where it offered to take you, if anywhere. */
@@ -110,7 +118,9 @@ export async function ask(
     res = await fetch(`${AUTH_API}/api/assistant`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-      body: JSON.stringify({ messages, context, destinations }),
+      // The reader's own date. The server runs on UTC, so late in its day its
+      // "tomorrow" is not theirs, and a visit would be booked a day out.
+      body: JSON.stringify({ messages, context, destinations, today: localDate() }),
     })
   } catch {
     throw new ApiError('We could not reach the assistant.', 'network')
