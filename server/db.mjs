@@ -20,3 +20,4 @@ export const toPublicUser = impl.toPublicUser
 export const getSiteState = impl.getSiteState
 export const saveSiteState = impl.saveSiteState
 export const setPassword = impl.setPassword
+export const setActive = impl.setActive

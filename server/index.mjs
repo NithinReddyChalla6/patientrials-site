@@ -12,6 +12,7 @@ import {
   getSiteState,
   saveSiteState,
   setPassword,
+  setActive,
 } from './db.mjs'
 
 /**
@@ -216,6 +217,38 @@ app.post('/api/collaborators', async (req, res) => {
   // Re-read: `row` predates the flag being set, and returning it would tell the
   // browser this person may keep the issued password.
   res.status(201).json({ user: toPublicUser(await findUserById(row.id)), password })
+})
+
+/**
+ * Enable or disable someone's sign-in.
+ *
+ * The Team screen's toggle only ever changed the site's own record, while the
+ * login reads the account. Deactivating someone therefore looked like it had
+ * revoked their access and had not: they could still sign in with the password
+ * they already had. For a console that decides who may open patient records,
+ * that is the wrong way round to fail.
+ */
+app.patch('/api/collaborators/:id', async (req, res) => {
+  const caller = await currentUser(req)
+  if (!caller) return res.status(401).json({ error: 'Not signed in.' })
+  if (caller.role !== 'site_administrator') {
+    return res.status(403).json({ error: 'Only a site administrator can do that.' })
+  }
+
+  const { active } = req.body ?? {}
+  if (typeof active !== 'boolean') {
+    return res.status(400).json({ error: 'active must be true or false.' })
+  }
+
+  const target = await findUserById(req.params.id)
+  if (!target) return res.status(404).json({ error: 'Collaborator not found.' })
+  // Locking yourself out is not a thing to discover after the fact.
+  if (target.id === caller.id) {
+    return res.status(400).json({ error: 'You cannot deactivate your own account.' })
+  }
+
+  await setActive(target.id, active)
+  res.json({ user: toPublicUser(await findUserById(target.id)) })
 })
 
 /** Replace an issued password with one of your own. */

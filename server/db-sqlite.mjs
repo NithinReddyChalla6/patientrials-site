@@ -123,6 +123,12 @@ export function saveSiteState(data) {
 }
 
 /** Replace someone's password hash, and say whether they must change it next. */
+/** Enable or disable a sign-in. The login refuses an inactive account. */
+export function setActive(id, active) {
+  db.prepare('UPDATE users SET active = ? WHERE id = ?').run(active ? 1 : 0, id)
+  return findUserById(id)
+}
+
 export function setPassword(id, passwordHash, mustChangePassword) {
   db.prepare('UPDATE users SET passwordHash = ?, mustChangePassword = ? WHERE id = ?').run(
     passwordHash,

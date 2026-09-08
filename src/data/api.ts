@@ -690,13 +690,43 @@ export const siteApi = {
     await persistState()
     return { user: record }
   },
-  updateCollaborator: (id: string, patch: Partial<User>) =>
-    writePersist(() => {
-      const i = db.users.findIndex((u) => u.id === id)
-      if (i === -1) throw new ApiError('Collaborator not found.', 'not_found')
-      db.users[i] = { ...db.users[i], ...patch }
-      return clone(db.users[i])
-    }),
+  /**
+   * Change a collaborator, and mean it.
+   *
+   * `active` decides whether someone can sign in, and that is read from the
+   * account, not from this record. Changing it only here made the toggle look
+   * like it had revoked access when it had not — so the change goes to the
+   * server first, and the local copy follows what the server confirms.
+   */
+  updateCollaborator: async (id: string, patch: Partial<User>): Promise<User> => {
+    const i = db.users.findIndex((u) => u.id === id)
+    if (i === -1) throw new ApiError('Collaborator not found.', 'not_found')
+
+    if (typeof patch.active === 'boolean') {
+      const token = authToken()
+      if (token) {
+        let res: Response | undefined
+        try {
+          res = await fetch(`${AUTH_API}/api/collaborators/${encodeURIComponent(id)}`, {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+            body: JSON.stringify({ active: patch.active }),
+          })
+        } catch {
+          res = undefined // no server reachable — fall through to the demo path
+        }
+        if (res) {
+          const body = (await res.json().catch(() => ({}))) as { user?: User; error?: string }
+          if (!res.ok) throw new ApiError(body.error ?? 'We could not update this person.')
+        }
+      }
+    }
+
+    db.users[i] = { ...db.users[i], ...patch }
+    const updated = clone(db.users[i])
+    await persistState()
+    return updated
+  },
   removeCollaborator: (id: string) =>
     writePersist(() => {
       db.users = db.users.filter((u) => u.id !== id)

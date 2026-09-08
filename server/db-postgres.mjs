@@ -114,6 +114,12 @@ export async function saveSiteState(data) {
 }
 
 /** Replace someone's password hash, and say whether they must change it next. */
+/** Enable or disable a sign-in. The login refuses an inactive account. */
+export async function setActive(id, active) {
+  await pool.query('UPDATE users SET active = $1 WHERE id = $2', [Boolean(active), id])
+  return findUserById(id)
+}
+
 export async function setPassword(id, passwordHash, mustChangePassword) {
   await pool.query(
     'UPDATE users SET "passwordHash" = $1, "mustChangePassword" = $2 WHERE id = $3',
