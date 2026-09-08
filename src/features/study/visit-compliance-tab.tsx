@@ -1,4 +1,14 @@
-import { CalendarCheck, CalendarX, TriangleAlert } from 'lucide-react'
+import {
+  CalendarCheck,
+  CalendarX,
+  CheckCircle2,
+  Circle,
+  CircleDashed,
+  Clock,
+  TriangleAlert,
+  XCircle,
+} from 'lucide-react'
+import type { LucideIcon } from 'lucide-react'
 import { appointmentsApi, bookingsApi, subjectsApi } from '@/data/api'
 import type { Subject } from '@/data/types'
 import { useAsync } from '@/lib/use-async'
@@ -13,14 +23,57 @@ import { InferredNotice } from '@/components/patterns/inferred-notice'
 import { useStudy } from './study-layout'
 import { isActionable, visitsFor, type Visit, type VisitState } from './protocol-schedule'
 
-/** How each state reads and looks. One place, so the grid and legend agree. */
-const STATE: Record<VisitState, { label: string; dot: string; text: string }> = {
-  complete: { label: 'Done, in window', dot: 'bg-success', text: 'text-success' },
-  deviation: { label: 'Done, outside window', dot: 'bg-cta', text: 'text-cta' },
-  due: { label: 'Due now', dot: 'bg-warning', text: 'text-warning' },
-  missed: { label: 'Missed', dot: 'bg-destructive', text: 'text-destructive' },
-  upcoming: { label: 'Not due yet', dot: 'bg-border', text: 'text-muted-foreground' },
-  unknown: { label: 'No enrolment date', dot: 'bg-transparent', text: 'text-muted-foreground' },
+/**
+ * How each state reads and looks. One place, so grid, legend and list agree.
+ *
+ * Every state carries its own icon, not just its own colour. Six dots in one
+ * column are only distinguishable by hue, and the three that matter most —
+ * missed, off schedule, needs booking — sat next to each other in the warm end
+ * of the palette, which made them the hardest three to tell apart at 10px.
+ * Shape separates them; colour then says how bad each one is, and only the two
+ * genuine failures are warm. Needing a booking is a job, not a failure, so it
+ * reads as informational rather than as a third shade of alarm.
+ */
+const STATE: Record<
+  VisitState,
+  { label: string; hint: string; icon: LucideIcon; text: string }
+> = {
+  complete: {
+    label: 'On time',
+    hint: 'Happened within the allowed dates',
+    icon: CheckCircle2,
+    text: 'text-success',
+  },
+  deviation: {
+    label: 'Off schedule',
+    hint: 'Happened, but outside the allowed dates',
+    icon: TriangleAlert,
+    text: 'text-cta',
+  },
+  due: {
+    label: 'Needs booking',
+    hint: 'Can be booked now, and has not been',
+    icon: Clock,
+    text: 'text-info',
+  },
+  missed: {
+    label: 'Missed',
+    hint: 'The allowed dates passed with no visit',
+    icon: XCircle,
+    text: 'text-destructive',
+  },
+  upcoming: {
+    label: 'Not due yet',
+    hint: 'Nothing to do until its dates come round',
+    icon: Circle,
+    text: 'text-muted-foreground/60',
+  },
+  unknown: {
+    label: 'No start date',
+    hint: 'Recruited before enrolment dates were recorded',
+    icon: CircleDashed,
+    text: 'text-muted-foreground/60',
+  },
 }
 
 const ORDER: VisitState[] = ['missed', 'deviation', 'due', 'upcoming', 'complete', 'unknown']
@@ -31,7 +84,7 @@ function fullName(subject: Subject) {
 
 /** One cell of the grid: a dot a sighted reader scans, a sentence a screen reader hears. */
 function VisitCell({ visit, subject }: { visit: Visit; subject: Subject }) {
-  const { label, dot } = STATE[visit.state]
+  const { label, icon: Icon, text } = STATE[visit.state]
   const when = visit.booking
     ? `booked ${formatDate(visit.booking.date)}`
     : visit.dueOn
@@ -40,15 +93,14 @@ function VisitCell({ visit, subject }: { visit: Visit; subject: Subject }) {
 
   return (
     <td className="border-l border-border px-3 py-2 text-center align-middle">
+      {/* Hovering a mark explains it, so the legend is a reference and not a
+          thing you have to keep going back to. */}
       <span
-        className={
-          visit.state === 'unknown'
-            ? 'inline-block size-2.5 rounded-full border border-dashed border-muted-foreground/60'
-            : `inline-block size-2.5 rounded-full ${dot}`
-        }
-        aria-hidden="true"
+        className="inline-flex"
         title={`${visit.template.name}: ${label}, ${when}`}
-      />
+      >
+        <Icon className={`size-4 ${text}`} aria-hidden="true" />
+      </span>
       <span className="sr-only">
         {fullName(subject)}, {visit.template.name}: {label}, {when}
       </span>
@@ -118,7 +170,9 @@ export function VisitComplianceTab() {
               <h2 className="text-lg font-semibold text-foreground">Visit compliance</h2>
               <p className="mt-1 max-w-2xl text-sm text-muted-foreground">
                 Each recruited participant's protocol visits, measured from their own enrolment
-                date, against what has actually been booked.
+                date, against what has actually been booked. A visit has a spread of dates it is
+                allowed to happen in — set as its window on the appointment template — and one
+                that happens outside that spread is a protocol deviation.
               </p>
             </div>
 
@@ -149,28 +203,42 @@ export function VisitComplianceTab() {
             ) : (
               <>
                 <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+                  {/* Same four words as the legend and the grid. A tile called
+                      one thing and a legend calling it another is how a reader
+                      stops trusting either. */}
                   <StatTile
-                    label="Missed"
+                    label={STATE.missed.label}
                     value={count('missed')}
-                    hint="Window closed, never booked"
+                    hint={STATE.missed.hint}
                     icon={CalendarX}
                   />
-                  <StatTile label="Due now" value={count('due')} hint="Window open, not booked" />
                   <StatTile
-                    label="Outside window"
-                    value={count('deviation')}
-                    hint="Booked, but off protocol"
+                    label={STATE.due.label}
+                    value={count('due')}
+                    hint={STATE.due.hint}
+                    icon={Clock}
                   />
-                  <StatTile label="On track" value={count('complete')} hint="Done in window" />
+                  <StatTile
+                    label={STATE.deviation.label}
+                    value={count('deviation')}
+                    hint={STATE.deviation.hint}
+                    icon={TriangleAlert}
+                  />
+                  <StatTile
+                    label={STATE.complete.label}
+                    value={count('complete')}
+                    hint={STATE.complete.hint}
+                    icon={CheckCircle2}
+                  />
                 </div>
 
                 {undated > 0 && (
                   <Alert tone="warning" title="Some schedules cannot be worked out">
                     {undated === 1
-                      ? '1 participant has no enrolment date recorded, so their visits are left blank below.'
-                      : `${undated} participants have no enrolment date recorded, so their visits are left blank below.`}{' '}
-                    Enrolment dates are stamped when someone is recruited, so anyone recruited
-                    before this screen existed will not have one.
+                      ? '1 participant has no enrolment date, so nothing can be worked out for them.'
+                      : `${undated} participants have no enrolment date, so nothing can be worked out for them.`}{' '}
+                    The date is stamped when someone is recruited, so anyone recruited before this
+                    screen existed will not have one.
                   </Alert>
                 )}
 
@@ -199,15 +267,20 @@ export function VisitComplianceTab() {
                               {flagged.map((visit) => (
                                 <li key={visit.template.id}>
                                   <span className="inline-flex items-center gap-1.5 rounded-full border border-border bg-sunken px-2.5 py-1 text-xs text-foreground">
-                                    <span
-                                      className={`inline-block size-2 rounded-full ${STATE[visit.state].dot}`}
-                                      aria-hidden="true"
-                                    />
+                                    {(() => {
+                                      const { icon: Icon, text } = STATE[visit.state]
+                                      return (
+                                        <Icon
+                                          className={`size-3.5 shrink-0 ${text}`}
+                                          aria-hidden="true"
+                                        />
+                                      )
+                                    })()}
                                     {visit.template.name}
                                     <span className="text-muted-foreground">
                                       {visit.state === 'deviation' && visit.booking
-                                        ? `booked ${formatDate(visit.booking.date)}, outside window`
-                                        : `due ${formatDate(visit.dueOn)}`}
+                                        ? `${STATE.deviation.label.toLowerCase()} — happened ${formatDate(visit.booking.date)}`
+                                        : `${STATE[visit.state].label.toLowerCase()} — due ${formatDate(visit.dueOn)}`}
                                     </span>
                                   </span>
                                 </li>
@@ -236,23 +309,22 @@ export function VisitComplianceTab() {
                     Every participant, every visit
                   </h3>
 
-                  <ul className="mt-3 flex flex-wrap gap-x-4 gap-y-2">
-                    {ORDER.map((state) => (
-                      <li
-                        key={state}
-                        className="inline-flex items-center gap-1.5 text-xs text-muted-foreground"
-                      >
-                        <span
-                          className={
-                            state === 'unknown'
-                              ? 'inline-block size-2.5 rounded-full border border-dashed border-muted-foreground/60'
-                              : `inline-block size-2.5 rounded-full ${STATE[state].dot}`
-                          }
-                          aria-hidden="true"
-                        />
-                        {STATE[state].label}
-                      </li>
-                    ))}
+                  {/* Each mark is spelled out rather than colour-coded alone: a
+                      legend that only names hues is unusable to anyone who
+                      cannot separate them, and unmemorable to everyone else. */}
+                  <ul className="mt-3 grid gap-x-6 gap-y-2 sm:grid-cols-2 lg:grid-cols-3">
+                    {ORDER.map((state) => {
+                      const { label, hint, icon: Icon, text } = STATE[state]
+                      return (
+                        <li key={state} className="flex items-start gap-2 text-xs">
+                          <Icon className={`mt-0.5 size-4 shrink-0 ${text}`} aria-hidden="true" />
+                          <span className="min-w-0">
+                            <span className="font-medium text-foreground">{label}</span>
+                            <span className="block text-muted-foreground">{hint}</span>
+                          </span>
+                        </li>
+                      )
+                    })}
                   </ul>
 
                   {/* Wide protocols scroll inside the card, never the page. */}
