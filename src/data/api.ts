@@ -739,6 +739,20 @@ export interface StudyQuery {
   investigatorId?: string
 }
 
+/**
+ * How many participants are actually enrolled on a study.
+ *
+ * Counted from the participant records rather than read from the study's own
+ * `enrolled` field. That field was a separate tally kept in step by hand, and
+ * it drifted: studies reported 74 enrolled on the dashboard, the studies table
+ * and the progress bars while two participants held status `recruited` one
+ * click away. Two numbers for one fact will always disagree eventually; the
+ * one that cannot is the one derived from the records themselves.
+ */
+function recruitedOn(studyId: string): number {
+  return db.subjects.filter((s) => s.studyId === studyId && s.status === 'recruited').length
+}
+
 export const studiesApi = {
   list: ({ query = '', status = 'all', page = 1, pageSize = 12, investigatorId }: StudyQuery = {}) =>
     read<Paged<StudyWithCounts>>(() => {
@@ -749,14 +763,16 @@ export const studiesApi = {
         .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
         .map<StudyWithCounts>((study) => {
           const people = db.subjects.filter((s) => s.studyId === study.id)
+          const recruited = people.filter((s) => s.status === 'recruited').length
           return {
             ...study,
+            enrolled: recruited,
             // "Prospects" are everyone still in screening; "subjects" are enrolled.
             prospects: people.filter(
               (s) =>
                 s.status === 'pending' || s.status === 'validated' || s.status === 'prescreened',
             ).length,
-            subjects: people.filter((s) => s.status === 'recruited').length,
+            subjects: recruited,
           }
         })
       return paginate(clone(filtered), page, pageSize)
@@ -779,7 +795,7 @@ export const studiesApi = {
     read<Study>(() => {
       const study = db.studies.find((s) => s.id === id || s.nctId === id)
       if (!study) throw new ApiError(`No study found for ${id}.`, 'not_found')
-      return clone(study)
+      return { ...clone(study), enrolled: recruitedOn(study.id) }
     }),
 
   /** Step one of Create Study: resolve the NCT number, refusing duplicates. */
@@ -1319,11 +1335,7 @@ export const subjectsApi = {
         if (!subject || subject.status === status) return
         subject.status = status
         changed.push(id)
-        if (status === 'recruited') {
-          subject.recruitedAt = now()
-          const study = db.studies.find((s) => s.id === subject.studyId)
-          if (study) study.enrolled += 1
-        }
+        if (status === 'recruited') subject.recruitedAt = now()
       })
       return changed
     }),
@@ -1336,13 +1348,11 @@ export const subjectsApi = {
       // Only a real transition counts. Recruiting someone already recruited must
       // not stamp a second enrolment date, nor inflate the study's `enrolled`
       // tally — the batch setter above already guards itself this way.
+      // Only a real transition stamps an enrolment date; recruiting someone
+      // already recruited must not move it.
       const becameRecruited = status === 'recruited' && subject.status !== 'recruited'
       subject.status = status
-      if (becameRecruited) {
-        subject.recruitedAt = now()
-        const study = db.studies.find((s) => s.id === subject.studyId)
-        if (study) study.enrolled += 1
-      }
+      if (becameRecruited) subject.recruitedAt = now()
       return clone(subject)
     }),
 }
@@ -1770,7 +1780,7 @@ export const dashboardApi = {
       },
       enrollment: {
         target: db.studies.reduce((n, s) => n + s.enrollmentTarget, 0),
-        enrolled: db.studies.reduce((n, s) => n + s.enrolled, 0),
+        enrolled: db.subjects.filter((s) => s.status === 'recruited').length,
       },
       pipeline: {
         pending: db.subjects.filter((s) => s.status === 'pending').length,

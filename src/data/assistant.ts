@@ -33,12 +33,7 @@ export function studySummary(
     `Condition: ${study.condition}. Phase: ${study.phase}. Sponsor: ${study.sponsor}.`,
     `Status: ${study.status}, recruitment ${study.recruitmentStatus}.`,
     `Principal investigator: ${investigatorName ?? 'none assigned'}.`,
-    `Enrolment target: ${study.enrollmentTarget}.`,
-    // Two numbers claim to be "enrolled" and they do not always agree: the
-    // study record's own counter, and how many participants currently sit at
-    // status recruited. Naming both separately is the only way the assistant
-    // can report one without implying the other.
-    `Enrolment counter on the study record: ${study.enrolled}.`,
+    `Enrolled: ${study.enrolled} of a target of ${study.enrollmentTarget}.`,
     `Participant records on this study: ${subjects.length} in total — ` +
       `${count('pending')} new, ${count('validated')} validated, ` +
       `${count('prescreened')} pre-screened, ${count('recruited')} recruited, ` +
@@ -67,7 +62,7 @@ export function siteSummary(studies: Study[], investigators: Map<string, string>
     return (
       `- ${s.id} (${s.nctId}): ${s.title}. ${s.condition}, ${s.phase}, sponsor ${s.sponsor}. ` +
       `Status ${s.status}, recruitment ${s.recruitmentStatus}. ` +
-      `Investigator: ${pi}. Enrolment counter ${s.enrolled} of target ${s.enrollmentTarget}.`
+      `Investigator: ${pi}. Enrolled ${s.enrolled} of target ${s.enrollmentTarget}.`
     )
   })
   return [`This site has ${studies.length} studies.`, ...lines].join('\n')

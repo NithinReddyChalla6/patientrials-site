@@ -325,6 +325,11 @@ export interface Study {
   briefSummary: string
   consentDocuments: number
   enrollmentTarget: number
+  /**
+   * Participants currently at status `recruited`, counted from the records on
+   * every read. Any value sitting in storage is ignored: this was once a tally
+   * kept in step by hand and it drifted badly.
+   */
   enrolled: number
   createdAt: string
   promotedAt?: string
