@@ -120,3 +120,23 @@ export const ACTIONABLE: VisitState[] = ['missed', 'deviation', 'due']
 export function isActionable(state: VisitState): boolean {
   return ACTIONABLE.includes(state)
 }
+
+/**
+ * The protocol visit whose window contains `date` for this participant.
+ *
+ * Offered as a hint when tagging a booking after the fact. It narrows the
+ * choice without making it: a date landing inside a window is evidence the
+ * booking was that visit, not proof, and only someone who was there knows.
+ */
+export function templateWhoseWindowContains(
+  subject: Subject,
+  templates: AppointmentTemplate[],
+  date: string,
+): AppointmentTemplate | undefined {
+  if (!subject.recruitedAt) return undefined
+  // `today` only decides due/missed/upcoming, which this ignores — the window
+  // bounds it does read are fixed by the enrolment date alone.
+  return visitsFor(subject, templates, [], date).find(
+    (v) => date >= v.windowOpens && date <= v.windowCloses,
+  )?.template
+}

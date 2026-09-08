@@ -886,6 +886,22 @@ export const bookingsApi = {
       return clone(record)
     }),
 
+  /**
+   * Attach a booking to the protocol visit it satisfies, or detach it.
+   *
+   * Separate from a general update because it is the only field a booking gains
+   * after the fact: a visit arranged before the protocol schedule was linked up
+   * has to be tagged by someone who knows which visit it was, and guessing on
+   * their behalf would write a compliance record nobody checked.
+   */
+  setTemplate: (id: string, templateId: string | undefined) =>
+    write(() => {
+      const booking = db.bookings.find((b) => b.id === id)
+      if (!booking) throw new ApiError('Appointment not found.', 'not_found')
+      booking.templateId = templateId
+      return clone(booking)
+    }),
+
   remove: (id: string) =>
     write(() => {
       db.bookings = db.bookings.filter((b) => b.id !== id)

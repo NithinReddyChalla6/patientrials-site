@@ -24,6 +24,7 @@ import { useToast } from '@/components/ui/toast'
 import { FormField } from '@/components/patterns/form-field'
 import { EmptyState } from '@/components/patterns/empty-state'
 import { useAuth } from '@/features/auth/auth-context'
+import { templateWhoseWindowContains } from './protocol-schedule'
 
 const SCHEDULE_TYPES: ScheduleType[] = ['In person', 'Virtual']
 
@@ -167,6 +168,14 @@ export function AppointmentBookings({ studyId }: { studyId: string }) {
                         : `${booking.formIds.length} forms to complete`}
                     </p>
                   )}
+
+                  <ProtocolVisitTag
+                    booking={booking}
+                    subject={subject}
+                    templates={templates.data ?? []}
+                    canManage={canManage}
+                    onChanged={state.reload}
+                  />
                 </div>
 
                 {canManage && (
@@ -186,6 +195,83 @@ export function AppointmentBookings({ studyId }: { studyId: string }) {
         </ul>
       )}
     </section>
+  )
+}
+
+/**
+ * Attaches a booked visit to the protocol visit it satisfies.
+ *
+ * Bookings made before the schedule was linked up carry no protocol visit, so
+ * Visit Compliance cannot see them. Tagging is left to a person: the option
+ * whose window contains the date is marked as a hint, but a date falling in a
+ * window is evidence rather than proof, and a wrong tag is a compliance record
+ * nobody checked.
+ */
+function ProtocolVisitTag({
+  booking,
+  subject,
+  templates,
+  canManage,
+  onChanged,
+}: {
+  booking: Appointment
+  subject: Subject | undefined
+  templates: AppointmentTemplate[]
+  canManage: boolean
+  onChanged: () => void
+}) {
+  const toast = useToast()
+  const [saving, setSaving] = React.useState(false)
+  const tagged = templates.find((t) => t.id === booking.templateId)
+
+  const suggestion =
+    subject && templates.length > 0
+      ? templateWhoseWindowContains(subject, templates, booking.date)
+      : undefined
+
+  async function set(next: string | undefined) {
+    setSaving(true)
+    try {
+      await bookingsApi.setTemplate(booking.id, next)
+      toast.success(next ? 'Tagged to a protocol visit' : 'Protocol visit cleared')
+      onChanged()
+    } catch (err) {
+      toast.error(err instanceof ApiError ? err.message : 'We could not tag this appointment.')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  if (templates.length === 0) return null
+
+  if (!canManage) {
+    return tagged ? (
+      <p className="mt-2">
+        <Badge tone="brand">{tagged.name}</Badge>
+      </p>
+    ) : null
+  }
+
+  const fieldId = `booking-template-${booking.id}`
+  return (
+    <div className="mt-2 flex flex-wrap items-center gap-2">
+      <label htmlFor={fieldId} className="text-xs text-muted-foreground">
+        Protocol visit
+      </label>
+      <Combobox
+        id={fieldId}
+        options={templates.map((t) => ({
+          value: t.id,
+          label: suggestion?.id === t.id ? `${t.name} — fits this date` : t.name,
+        }))}
+        value={booking.templateId || undefined}
+        onChange={(value) => set(value ?? undefined)}
+        placeholder="Not tagged"
+        searchPlaceholder="Search protocol visits"
+        disabled={saving}
+        className="h-8 w-full max-w-[18rem] text-xs"
+      />
+    </div>
   )
 }
 
