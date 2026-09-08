@@ -209,4 +209,117 @@ app.get('/api/auth/me', async (req, res) => {
   res.json({ user, siteId: user.siteId })
 })
 
+
+/* ------------------------------------------------------------- assistant */
+
+/**
+ * The study assistant.
+ *
+ * Any OpenAI-compatible provider works — Groq, OpenAI, a local Ollama — because
+ * they share a request shape. Which one is in use is three environment
+ * variables rather than a code change, so moving between a free tier and a paid
+ * one, or between a hosted model and a laptop, costs a redeploy and nothing
+ * else.
+ *
+ * The key lives here and only here. A key in the front end is readable by
+ * anyone who opens their developer tools, so the browser talks to this route
+ * and this route talks to the provider.
+ */
+const LLM_API_KEY = process.env.LLM_API_KEY
+const LLM_BASE_URL = process.env.LLM_BASE_URL || 'https://api.groq.com/openai/v1'
+const LLM_MODEL = process.env.LLM_MODEL || 'openai/gpt-oss-20b'
+
+/**
+ * How the assistant speaks.
+ *
+ * Warm first, useful second. A greeting gets a greeting — a coordinator who
+ * says hello and is answered with a table has learnt the thing is a form with a
+ * cursor, and stops talking to it. But warmth without honesty is worse than
+ * neither here: it must say plainly when it does not know, because a confident
+ * wrong answer about a participant is the one failure this cannot afford.
+ */
+const ASSISTANT_SYSTEM = `You are the study assistant inside PatienTrials, a portal that clinical research sites use to run trials.
+
+You are talking to site staff — coordinators, investigators, administrators. They are busy and often mid-task.
+
+How to talk:
+- Be warm and human. If someone greets you, greet them back before anything else.
+- Be brief. Two or three sentences unless they ask for more.
+- Sound like a helpful colleague, not a manual. No corporate phrasing.
+- If someone sounds stressed or something has gone wrong, acknowledge it before you get practical.
+
+What you know:
+- You are given a summary of the study the person is currently looking at.
+- Answer from that summary. Quote real numbers from it.
+
+What you must never do:
+- Never invent a number, a name, or a date. If the summary does not contain it, say you cannot see it.
+- Never give medical advice or judge whether someone is eligible for a trial. Say that is the investigator's call.
+- Never claim to have changed anything. You can read and explain; you cannot act.
+
+If you are unsure, say so. Being wrong about a participant is far worse than being unhelpful.`
+
+app.post('/api/assistant', async (req, res) => {
+  const caller = await currentUser(req)
+  if (!caller) return res.status(401).json({ error: 'Not signed in.' })
+
+  if (!LLM_API_KEY) {
+    return res.status(503).json({
+      error: 'The assistant is not configured. Set LLM_API_KEY on the server.',
+    })
+  }
+
+  const { messages, context } = req.body ?? {}
+  if (!Array.isArray(messages) || messages.length === 0) {
+    return res.status(400).json({ error: 'Nothing to answer.' })
+  }
+
+  // Only the last few turns travel: a free tier is rate limited by tokens, and
+  // a conversation that grows without bound eventually fails mid-sentence.
+  const recent = messages.slice(-10).map((m) => ({
+    role: m.role === 'assistant' ? 'assistant' : 'user',
+    content: String(m.content ?? '').slice(0, 4000),
+  }))
+
+  const system = context
+    ? `${ASSISTANT_SYSTEM}\n\nHere is what you can see right now:\n${String(context).slice(0, 6000)}`
+    : ASSISTANT_SYSTEM
+
+  try {
+    const upstream = await fetch(`${LLM_BASE_URL}/chat/completions`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${LLM_API_KEY}`,
+      },
+      body: JSON.stringify({
+        model: LLM_MODEL,
+        messages: [{ role: 'system', content: system }, ...recent],
+        temperature: 0.6,
+        max_tokens: 700,
+      }),
+    })
+
+    if (upstream.status === 429) {
+      return res.status(429).json({
+        error: 'The assistant is busy right now. Give it a moment and ask again.',
+      })
+    }
+    if (!upstream.ok) {
+      const detail = await upstream.text()
+      console.error('[assistant] provider error', upstream.status, detail.slice(0, 300))
+      return res.status(502).json({ error: 'The assistant could not answer just now.' })
+    }
+
+    const body = await upstream.json()
+    const reply = body?.choices?.[0]?.message?.content?.trim()
+    if (!reply) return res.status(502).json({ error: 'The assistant returned nothing.' })
+
+    res.json({ reply })
+  } catch (err) {
+    console.error('[assistant] request failed', err)
+    res.status(502).json({ error: 'The assistant could not be reached.' })
+  }
+})
+
 app.listen(PORT, () => console.log(`[auth] PatienTrials auth API on http://localhost:${PORT}`))

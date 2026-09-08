@@ -291,7 +291,10 @@ const matches = (haystack: string[], query: string) =>
  * When unset (local dev) it falls back to the dev server on :3001; when the
  * value is unreachable the app degrades to demo mode.
  */
-const AUTH_API = (import.meta.env.VITE_API_BASE ?? 'http://localhost:3001').replace(/\/+$/, '')
+export const AUTH_API = (import.meta.env.VITE_API_BASE ?? 'http://localhost:3001').replace(
+  /\/+$/,
+  '',
+)
 
 export interface Session {
   user: User
@@ -307,7 +310,7 @@ export interface Session {
  */
 /** The stored bearer token, when there is a live session. */
 const SESSION_STORAGE_KEY = 'patientrials.site.session'
-function authToken(): string | undefined {
+export function authToken(): string | undefined {
   try {
     const raw = sessionStorage.getItem(SESSION_STORAGE_KEY)
     return raw ? (JSON.parse(raw) as Session).token : undefined

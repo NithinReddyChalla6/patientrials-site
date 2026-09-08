@@ -107,6 +107,9 @@ const AppointmentsTab = lazy(() =>
 const EmrPreviewPage = lazy(() =>
   import('@/features/emr/emr-preview-page').then((m) => ({ default: m.EmrPreviewPage })),
 )
+const AssistantTab = lazy(() =>
+  import('@/features/study/assistant-tab').then((m) => ({ default: m.AssistantTab })),
+)
 const BroadcastTab = lazy(() =>
   import('@/features/study/broadcast-tab').then((m) => ({ default: m.BroadcastTab })),
 )
@@ -199,6 +202,7 @@ export function AppRoutes() {
             <Route path="/studies/:studyId" element={<StudyLayout />}>
               <Route index element={<Navigate to="participants" replace />} />
               <Route path="participants" element={<ParticipantsTab />} />
+              <Route path="assistant" element={<AssistantTab />} />
 
               {/*
                 Guards mirror STUDY_TABS exactly. A hidden tab whose URL still
