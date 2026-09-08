@@ -107,6 +107,18 @@ const AppointmentsTab = lazy(() =>
 const EmrPreviewPage = lazy(() =>
   import('@/features/emr/emr-preview-page').then((m) => ({ default: m.EmrPreviewPage })),
 )
+const BroadcastTab = lazy(() =>
+  import('@/features/study/broadcast-tab').then((m) => ({ default: m.BroadcastTab })),
+)
+const SubjectNotesTab = lazy(() =>
+  import('@/features/study/subject-notes-tab').then((m) => ({ default: m.SubjectNotesTab })),
+)
+const TransferInitiatedTab = lazy(() =>
+  import('@/features/study/transfers-tab').then((m) => ({ default: m.TransferInitiatedTab })),
+)
+const TransferResolvedTab = lazy(() =>
+  import('@/features/study/transfers-tab').then((m) => ({ default: m.TransferResolvedTab })),
+)
 const VisitComplianceTab = lazy(() =>
   import('@/features/study/visit-compliance-tab').then((m) => ({
     default: m.VisitComplianceTab,
@@ -223,6 +235,16 @@ export function AppRoutes() {
               <Route element={<RequirePermission permission="appointment.manage" />}>
                 <Route path="appointments" element={<AppointmentsTab />} />
                 <Route path="visit-compliance" element={<VisitComplianceTab />} />
+              </Route>
+              <Route element={<RequirePermission permission="broadcast.send" />}>
+                <Route path="broadcast" element={<BroadcastTab />} />
+              </Route>
+              <Route element={<RequirePermission permission="note.manage" />}>
+                <Route path="notes" element={<SubjectNotesTab />} />
+              </Route>
+              <Route element={<RequirePermission permission="transfer.manage" />}>
+                <Route path="transfers" element={<TransferInitiatedTab />} />
+                <Route path="transfers-resolved" element={<TransferResolvedTab />} />
               </Route>
               <Route element={<RequirePermission permission="location.manage" />}>
                 <Route path="locations" element={<LocationsTab />} />

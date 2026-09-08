@@ -1,5 +1,6 @@
 import type {
   Appointment,
+  BroadcastMessage,
   ApprovedLocation,
   AppointmentTemplate,
   Facility,
@@ -20,6 +21,8 @@ import type {
   StudyForm,
   StudyRequest,
   Subject,
+  SubjectNote,
+  Transfer,
   SubjectStatus,
   User,
 } from '../types'
@@ -1070,5 +1073,94 @@ export const publicTrials: PublicTrial[] = [
       'Able to attend visits in the Dallas–Fort Worth area',
     ],
     estimatedDuration: '26 weeks, about 7 visits',
+  },
+]
+
+/* ------------------------------------------- broadcasts, notes, transfers */
+
+export const broadcasts: BroadcastMessage[] = [
+  {
+    id: 'MSG-1',
+    studyId: 'STU01268',
+    subject: 'Your next visit and what to bring',
+    body: 'Please bring your current medication list and arrive fifteen minutes early so we can complete your vitals before you see the study team.',
+    audience: 'recruited',
+    recipientCount: 3,
+    sentBy: 'Lilly Joy',
+    sentAt: daysAgo(9),
+  },
+  {
+    id: 'MSG-2',
+    studyId: 'STU01268',
+    subject: 'Thank you for completing pre-screening',
+    body: 'We have everything we need for now. The study team will be in touch within a week to let you know whether you are eligible.',
+    audience: 'prescreened',
+    recipientCount: 2,
+    sentBy: 'Lilly Joy',
+    sentAt: daysAgo(21),
+  },
+]
+
+export const subjectNotes: SubjectNote[] = [
+  {
+    id: 'NOTE-1',
+    studyId: 'STU01268',
+    subjectId: 'PT240103',
+    body: 'Reported mild nausea for two days after the first dose. Settled without intervention; no change to the regimen.',
+    author: 'Lilly Joy',
+    createdAt: daysAgo(12),
+  },
+  {
+    id: 'NOTE-2',
+    studyId: 'STU01268',
+    subjectId: 'PT240103',
+    body: 'Prefers morning appointments. Works nights and cannot reliably attend before 10:00.',
+    author: 'Judy Hopps',
+    createdAt: daysAgo(19),
+  },
+  {
+    id: 'NOTE-3',
+    studyId: 'STU01268',
+    subjectId: 'PT240108',
+    body: 'Partner attends every visit and helps with the diary. Confirmed they may be present during assessments.',
+    author: 'Lilly Joy',
+    createdAt: daysAgo(5),
+  },
+]
+
+export const transfers: Transfer[] = [
+  {
+    id: 'TRF-1',
+    studyId: 'STU01268',
+    subjectId: 'PT240108',
+    toSiteName: 'Frisco Clinical Partners',
+    reason: 'Relocating for work and can no longer reach this site for weekly visits.',
+    status: 'initiated',
+    initiatedBy: 'Lilly Joy',
+    initiatedAt: daysAgo(4),
+  },
+  {
+    id: 'TRF-2',
+    studyId: 'STU01268',
+    subjectId: 'PT240103',
+    toSiteName: 'Sunshine Medical Center',
+    reason: 'Requested a site closer to home after moving within the metro area.',
+    status: 'accepted',
+    initiatedBy: 'Lilly Joy',
+    initiatedAt: daysAgo(34),
+    resolvedAt: daysAgo(27),
+    resolutionNote: 'Receiving site confirmed capacity and took over from visit four.',
+  },
+  {
+    id: 'TRF-3',
+    studyId: 'STU01268',
+    subjectId: 'PT240100',
+    toSiteName: 'Plano Clinical Research',
+    reason: 'Asked to move to the site their consultant works from.',
+    status: 'declined',
+    initiatedBy: 'Judy Hopps',
+    initiatedAt: daysAgo(46),
+    resolvedAt: daysAgo(41),
+    resolutionNote: 'Receiving site is not open to recruitment on this protocol.',
   },
 ]

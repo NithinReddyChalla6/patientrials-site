@@ -23,7 +23,11 @@ import type {
   Medication,
   SponsorQuery,
   Prescription,
+  BroadcastMessage,
   StudyAsset,
+  SubjectNote,
+  Transfer,
+  TransferStatus,
   StudyForm,
   StudyWithCounts,
   StudyPromotion,
@@ -136,6 +140,9 @@ const db = {
   medications: clone(seed.medications),
   prescriptions: clone(seed.prescriptions),
   studyAssets: clone(seed.studyAssets),
+  broadcasts: clone(seed.broadcasts),
+  subjectNotes: clone(seed.subjectNotes),
+  transfers: clone(seed.transfers),
   publicTrials: clone(seed.publicTrials),
 }
 
@@ -1778,4 +1785,140 @@ export const dashboardApi = {
         [...db.subjects].sort((a, b) => b.createdAt.localeCompare(a.createdAt)).slice(0, 6),
       ),
     })),
+}
+
+/* -------------------------------------------------------------- broadcasts */
+
+export const broadcastsApi = {
+  list: (studyId: string) =>
+    read<BroadcastMessage[]>(
+      () =>
+        clone(
+          db.broadcasts
+            .filter((b) => b.studyId === studyId)
+            .sort((a, b) => b.sentAt.localeCompare(a.sentAt)),
+        ),
+      [],
+    ),
+
+  /**
+   * How many participants a given audience currently covers.
+   *
+   * Counted at send time and stored with the message, because the audience is
+   * a rule and the study behind it keeps moving — the same rule tomorrow
+   * reaches a different set of people.
+   */
+  audienceSize: (studyId: string, audience: BroadcastMessage['audience']) =>
+    read<number>(
+      () =>
+        db.subjects.filter(
+          (s) => s.studyId === studyId && (audience === 'all' || s.status === audience),
+        ).length,
+      0,
+    ),
+
+  send: (input: Omit<BroadcastMessage, 'id' | 'sentAt' | 'recipientCount'>) =>
+    write(() => {
+      if (!input.subject.trim()) throw new ApiError('Give the message a subject line.', 'invalid')
+      if (!input.body.trim()) throw new ApiError('Write the message.', 'invalid')
+      const recipientCount = db.subjects.filter(
+        (s) =>
+          s.studyId === input.studyId &&
+          (input.audience === 'all' || s.status === input.audience),
+      ).length
+      if (recipientCount === 0) {
+        throw new ApiError('Nobody on this study matches that audience.', 'invalid')
+      }
+      const record: BroadcastMessage = {
+        ...input,
+        subject: input.subject.trim(),
+        body: input.body.trim(),
+        recipientCount,
+        id: nextId('MSG'),
+        sentAt: now(),
+      }
+      db.broadcasts.push(record)
+      return clone(record)
+    }),
+}
+
+/* ------------------------------------------------------------ subject notes */
+
+export const subjectNotesApi = {
+  list: (studyId: string) =>
+    read<SubjectNote[]>(
+      () =>
+        clone(
+          db.subjectNotes
+            .filter((n) => n.studyId === studyId)
+            .sort((a, b) => b.createdAt.localeCompare(a.createdAt)),
+        ),
+      [],
+    ),
+
+  /** Append only. A note that can be edited afterwards is not a record. */
+  add: (input: Omit<SubjectNote, 'id' | 'createdAt'>) =>
+    write(() => {
+      if (!input.subjectId) throw new ApiError('Choose which participant this is about.', 'invalid')
+      if (!input.body.trim()) throw new ApiError('Write the note.', 'invalid')
+      const record: SubjectNote = {
+        ...input,
+        body: input.body.trim(),
+        id: nextId('NOTE'),
+        createdAt: now(),
+      }
+      db.subjectNotes.push(record)
+      return clone(record)
+    }),
+}
+
+/* ---------------------------------------------------------------- transfers */
+
+export const transfersApi = {
+  list: (studyId: string) =>
+    read<Transfer[]>(
+      () =>
+        clone(
+          db.transfers
+            .filter((t) => t.studyId === studyId)
+            .sort((a, b) => b.initiatedAt.localeCompare(a.initiatedAt)),
+        ),
+      [],
+    ),
+
+  initiate: (input: Omit<Transfer, 'id' | 'status' | 'initiatedAt' | 'resolvedAt' | 'resolutionNote'>) =>
+    write(() => {
+      if (!input.subjectId) throw new ApiError('Choose who is transferring.', 'invalid')
+      if (!input.toSiteName.trim()) throw new ApiError('Name the receiving site.', 'invalid')
+      const open = db.transfers.find(
+        (t) => t.subjectId === input.subjectId && t.status === 'initiated',
+      )
+      if (open) {
+        throw new ApiError('This participant already has a transfer in progress.', 'duplicate')
+      }
+      const record: Transfer = {
+        ...input,
+        toSiteName: input.toSiteName.trim(),
+        reason: input.reason.trim(),
+        id: nextId('TRF'),
+        status: 'initiated',
+        initiatedAt: now(),
+      }
+      db.transfers.push(record)
+      return clone(record)
+    }),
+
+  /** Close a transfer. Only one that is still open can be resolved. */
+  resolve: (id: string, status: Exclude<TransferStatus, 'initiated'>, note?: string) =>
+    write(() => {
+      const transfer = db.transfers.find((t) => t.id === id)
+      if (!transfer) throw new ApiError('Transfer not found.', 'not_found')
+      if (transfer.status !== 'initiated') {
+        throw new ApiError('This transfer has already been resolved.', 'invalid')
+      }
+      transfer.status = status
+      transfer.resolvedAt = now()
+      transfer.resolutionNote = note?.trim() || undefined
+      return clone(transfer)
+    }),
 }

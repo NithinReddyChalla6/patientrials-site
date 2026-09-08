@@ -588,3 +588,60 @@ export interface Paged<T> {
   page: number
   pageSize: number
 }
+
+/* ------------------------------------------- broadcasts, notes, transfers */
+
+/**
+ * A message sent to several participants at once.
+ *
+ * The audience is stored as the rule that chose it, not as the list it
+ * resolved to. A study's participants move between statuses constantly, and a
+ * frozen list of ids would stop explaining, months later, why a given person
+ * received it — "everyone recruited, on the 3rd" still does.
+ */
+export interface BroadcastMessage {
+  id: string
+  studyId: string
+  /** The line participants see first. */
+  subject: string
+  body: string
+  /** Which participants it went to: a status, or everyone on the study. */
+  audience: SubjectStatus | 'all'
+  /** How many it reached when sent, kept because the audience will drift. */
+  recipientCount: number
+  sentBy: string
+  sentAt: string
+}
+
+/**
+ * A note about one participant.
+ *
+ * Append-only by design: notes are the running account of what staff observed
+ * and decided, and one that can be rewritten afterwards is worth little when a
+ * monitor asks what was known and when.
+ */
+export interface SubjectNote {
+  id: string
+  studyId: string
+  subjectId: string
+  body: string
+  author: string
+  createdAt: string
+}
+
+export type TransferStatus = 'initiated' | 'accepted' | 'declined' | 'withdrawn'
+
+/** A participant moving to another site, and how that request ended. */
+export interface Transfer {
+  id: string
+  studyId: string
+  subjectId: string
+  /** Where they are going. */
+  toSiteName: string
+  reason: string
+  status: TransferStatus
+  initiatedBy: string
+  initiatedAt: string
+  resolvedAt?: string
+  resolutionNote?: string
+}
