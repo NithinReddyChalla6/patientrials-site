@@ -1,0 +1,17 @@
+# This is a preview deployment of the PatienTrials Site Portal. The console
+# lives behind a login and the participant pages are not on a production
+# domain yet, so nothing here belongs in search results.
+#
+# What actually keeps it out is the `X-Robots-Tag: noindex, nofollow` header
+# served on every response (see vercel.json). Crawling is deliberately NOT
+# disallowed below: a crawler has to fetch a page to read that header, and a
+# blanket `Disallow: /` would stop it doing so — leaving the bare URLs
+# indexable from any external link, which is the outcome we are avoiding.
+#
+# When this moves to a real domain and the participant funnel is meant to be
+# found, drop the header in vercel.json and disallow the staff routes here
+# (/hub, /dashboard, /studies, /onboarding, /change-password), leaving
+# /find-trials, /trials/* and /about crawlable.
+
+User-agent: *
+Allow: /
