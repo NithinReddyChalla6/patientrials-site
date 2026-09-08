@@ -1,7 +1,13 @@
 import * as React from 'react'
 import { CalendarCheck, MapPin, Plus, User, X } from 'lucide-react'
-import { bookingsApi, formsApi, locationsApi, siteApi, subjectsApi, ApiError } from '@/data/api'
-import type { Appointment, ApprovedLocation, ScheduleType, Subject } from '@/data/types'
+import { appointmentsApi, bookingsApi, formsApi, locationsApi, siteApi, subjectsApi, ApiError } from '@/data/api'
+import type {
+  Appointment,
+  AppointmentTemplate,
+  ApprovedLocation,
+  ScheduleType,
+  Subject,
+} from '@/data/types'
 import { APPOINTMENT_SLOTS } from '@/data/reference'
 import { useAsync } from '@/lib/use-async'
 import { formatDate } from '@/lib/format'
@@ -40,6 +46,7 @@ export function AppointmentBookings({ studyId }: { studyId: string }) {
     [studyId],
   )
   const locations = useAsync(() => locationsApi.list(studyId), [studyId])
+  const templates = useAsync(() => appointmentsApi.list(studyId), [studyId])
   const forms = useAsync(() => formsApi.list({ category: 'form' }), [])
   const team = useAsync(() => siteApi.listCollaborators(), [])
 
@@ -93,6 +100,7 @@ export function AppointmentBookings({ studyId }: { studyId: string }) {
           studyId={studyId}
           subjects={subjects.data?.items ?? []}
           locations={(locations.data ?? []).filter((l) => l.enabled)}
+          templates={templates.data ?? []}
           forms={(forms.data ?? []).map((f) => ({ id: f.id, title: f.title }))}
           team={(team.data ?? []).map((m) => `${m.firstName} ${m.lastName}`)}
           onDone={() => {
@@ -185,6 +193,7 @@ function BookingForm({
   studyId,
   subjects,
   locations,
+  templates,
   forms,
   team,
   onDone,
@@ -193,6 +202,7 @@ function BookingForm({
   studyId: string
   subjects: Subject[]
   locations: ApprovedLocation[]
+  templates: AppointmentTemplate[]
   forms: { id: string; title: string }[]
   team: string[]
   onDone: () => void
@@ -201,6 +211,7 @@ function BookingForm({
   const toast = useToast()
   const [description, setDescription] = React.useState('')
   const [subjectId, setSubjectId] = React.useState('')
+  const [templateId, setTemplateId] = React.useState('')
   const [scheduleType, setScheduleType] = React.useState<ScheduleType>('In person')
   const [withName, setWithName] = React.useState('')
   const [formIds, setFormIds] = React.useState<string[]>([])
@@ -225,6 +236,7 @@ function BookingForm({
       await bookingsApi.add({
         studyId,
         subjectId,
+        templateId: templateId || undefined,
         description: description.trim(),
         scheduleType,
         withName,
@@ -282,6 +294,23 @@ function BookingForm({
                 onChange={(value) => setSubjectId(value ?? '')}
                 placeholder="Select a participant"
                 searchPlaceholder="Search by name or ID"
+              />
+            )}
+          </FormField>
+
+          <FormField
+            id="apptTemplate"
+            label="Protocol visit"
+            hint="Which scheduled visit this is. Leave blank for an ad-hoc visit."
+          >
+            {(aria) => (
+              <Combobox
+                {...aria}
+                options={templates.map((t) => ({ value: t.id, label: t.name }))}
+                value={templateId || undefined}
+                onChange={(value) => setTemplateId(value ?? '')}
+                placeholder="Not a protocol visit"
+                searchPlaceholder="Search protocol visits"
               />
             )}
           </FormField>

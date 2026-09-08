@@ -1,4 +1,5 @@
 import type {
+  Appointment,
   ApprovedLocation,
   AppointmentTemplate,
   Facility,
@@ -33,6 +34,8 @@ import type {
  */
 
 const daysAgo = (n: number) => new Date(Date.now() - n * 86_400_000).toISOString()
+/** The date part alone, which is what a booking stores. */
+const dateAgo = (n: number) => daysAgo(n).slice(0, 10)
 /** A datetime-local value (no seconds or zone), which is what the pickers use. */
 const daysAhead = (n: number, time = '09:30') =>
   new Date(Date.now() + n * 86_400_000).toISOString().slice(0, 10) + 'T' + time
@@ -472,6 +475,12 @@ function buildSubjects(): Subject[] {
             : 'Diagnosed two years ago, currently stable on standard therapy.',
         status: STATUS_CYCLE[i % STATUS_CYCLE.length],
         createdAt: daysAgo((i % 30) + 1),
+        // Only a recruited participant has enrolled, and protocol visits are
+        // counted from that date rather than from when the record was made.
+        recruitedAt:
+          STATUS_CYCLE[i % STATUS_CYCLE.length] === 'recruited'
+            ? daysAgo(20 + i)
+            : undefined,
         prescreeningAnswers: [
           { question: 'Are you 18 years of age or older?', answer: 'Yes', desired: 'Yes' },
           {
@@ -725,6 +734,7 @@ export const appointmentTemplates: AppointmentTemplate[] = [
     week: '1',
     day: '3',
     hours: '11',
+    windowDays: 2,
     createdAt: daysAgo(80),
   },
   {
@@ -737,6 +747,7 @@ export const appointmentTemplates: AppointmentTemplate[] = [
     week: '2',
     day: '6',
     hours: '12',
+    windowDays: 3,
     createdAt: daysAgo(78),
   },
   {
@@ -749,7 +760,59 @@ export const appointmentTemplates: AppointmentTemplate[] = [
     week: '4',
     day: '2',
     hours: '09',
+    windowDays: 5,
     createdAt: daysAgo(40),
+  },
+]
+
+/**
+ * Booked visits.
+ *
+ * Deliberately uneven: one visit inside its window, one outside it, and two
+ * never booked at all, so Visit Compliance has each of its states to show
+ * rather than a wall of green.
+ */
+export const bookings: Appointment[] = [
+  {
+    id: 'BKG-1',
+    studyId: 'STU01268',
+    subjectId: 'PT240103',
+    templateId: 'APT-1',
+    description: 'Screening visit',
+    scheduleType: 'In person',
+    withName: 'Judy Hopps',
+    formIds: [],
+    date: dateAgo(21),
+    timeSlot: '11:00',
+    locationId: 'AL-1',
+    createdAt: daysAgo(24),
+  },
+  {
+    id: 'BKG-2',
+    studyId: 'STU01268',
+    subjectId: 'PT240103',
+    templateId: 'APT-2',
+    description: 'Follow-up check-in',
+    scheduleType: 'Virtual',
+    withName: 'Judy Hopps',
+    formIds: [],
+    date: dateAgo(6),
+    timeSlot: '12:00',
+    createdAt: daysAgo(9),
+  },
+  {
+    id: 'BKG-3',
+    studyId: 'STU01268',
+    subjectId: 'PT240108',
+    templateId: 'APT-1',
+    description: 'Screening visit',
+    scheduleType: 'In person',
+    withName: 'Judy Hopps',
+    formIds: [],
+    date: dateAgo(26),
+    timeSlot: '11:00',
+    locationId: 'AL-2',
+    createdAt: daysAgo(29),
   },
 ]
 

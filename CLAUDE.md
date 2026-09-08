@@ -81,6 +81,40 @@ component patterns/snippets.
 - Treat its output as reference to adapt into our token system + component
   layering, not as drop-in code. It must still obey the guardrails below.
 
+## SEO (OpenSEO)
+
+**`openseo` plugin + MCP.** Keyword research, competitor/backlink data and site
+audits. Installed at **user scope**, so it is available in every project, not
+just this one.
+
+- Plugin `openseo@openseo` from marketplace `every-app/open-seo`. Ships nine
+  skills, invoked namespaced: `/openseo:seo-audit`, `/openseo:keyword-research`,
+  `/openseo:seo-project-setup`, `/openseo:local-seo`,
+  `/openseo:competitor-analysis`, `/openseo:competitive-landscape`,
+  `/openseo:keyword-clustering`, `/openseo:link-prospecting`,
+  `/openseo:seo-coach`.
+- MCP server `plugin:openseo:openseo` → `https://app.openseo.so/mcp`, OAuth.
+  Sign-in is interactive only (`/mcp` in a terminal session) — it cannot be done
+  non-interactively. A connected server is not proof this session can call it;
+  the tools only load in a session started **after** sign-in.
+- **It is a paid service (~$10/month).** `whoami` and `list_projects` are free
+  reads; research and audits are not. Do not fire paid workflows to "check if it
+  works", and do not run them without being asked.
+
+**Only part of this app is in scope.** Everything under `ProtectedRoute` —
+studies, subjects, forms, the whole staff console — is behind a login and
+invisible to crawlers. SEO applies solely to the participant path:
+
+```
+/login  /register  /find-trials  /trials/:nctId  /trials/:nctId/sign-up  /about
+```
+
+**Fix the meta tags before acting on any SEO advice.** This is a client-rendered
+SPA with a single `index.html`, so every one of those routes serves the same
+`<title>` and `<meta name="description">`. A crawler cannot tell `/about` from an
+individual trial page. Per-route metadata (and structured data on trial pages)
+has to come first — keyword work on top of one shared title changes nothing.
+
 ## Stack (do not drift from this)
 
 - React 19 + TypeScript + Vite + Tailwind (via PostCSS) + Radix primitives +

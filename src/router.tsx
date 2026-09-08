@@ -104,6 +104,11 @@ const QueriesTab = lazy(() =>
 const AppointmentsTab = lazy(() =>
   import('@/features/study/appointments-tab').then((m) => ({ default: m.AppointmentsTab })),
 )
+const VisitComplianceTab = lazy(() =>
+  import('@/features/study/visit-compliance-tab').then((m) => ({
+    default: m.VisitComplianceTab,
+  })),
+)
 const NotificationsTab = lazy(() =>
   import('@/features/study/notifications-tab').then((m) => ({ default: m.NotificationsTab })),
 )
@@ -195,6 +200,9 @@ export function AppRoutes() {
               <Route path="group-sessions" element={<GroupSessionsTab />} />
               <Route path="econsents" element={<EConsentsTab />} />
               <Route path="appointments" element={<AppointmentsTab />} />
+              <Route element={<RequirePermission permission="appointment.manage" />}>
+                <Route path="visit-compliance" element={<VisitComplianceTab />} />
+              </Route>
               <Route path="notifications" element={<NotificationsTab />} />
               <Route path="locations" element={<LocationsTab />} />
               <Route path="team" element={<TeamTab />} />

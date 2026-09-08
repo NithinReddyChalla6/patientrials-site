@@ -169,6 +169,13 @@ export interface Appointment {
   id: string
   studyId: string
   subjectId: string
+  /**
+   * The protocol visit this booking satisfies, when it satisfies one. Without
+   * it a booking is only a date, and nothing can tell whether a participant's
+   * Week 4 visit happened. Absent for ad-hoc visits, which are outside the
+   * protocol by definition.
+   */
+  templateId?: string
   description: string
   scheduleType: ScheduleType
   /** Who the participant is seeing. */
@@ -399,6 +406,13 @@ export interface Subject {
   healthCondition: string
   status: SubjectStatus
   createdAt: string
+  /**
+   * When the participant was recruited onto the study. Distinct from
+   * `createdAt`, which is when the record was made: protocol visits are counted
+   * from enrolment, so a record created during pre-screening weeks earlier would
+   * put every due date wrong. Absent until the status reaches `recruited`.
+   */
+  recruitedAt?: string
   prescreeningAnswers: { question: string; answer: string; desired?: string }[]
 }
 
@@ -484,9 +498,16 @@ export interface AppointmentTemplate {
   assignedToId?: string
   scheduleType: ScheduleType
   frequency: Frequency
+  /** Week and day are counted from the participant's enrolment date. */
   week: string
   day: string
   hours: string
+  /**
+   * How many days either side of the due date the visit may still happen in.
+   * A protocol states these as "Week 4 (+/- 3 days)"; outside the window the
+   * visit is a deviation. Absent means the protocol allows no slack.
+   */
+  windowDays?: number
   createdAt: string
 }
 

@@ -129,7 +129,7 @@ const db = {
   appointments: clone(seed.appointmentTemplates),
   notificationGroups: clone(seed.notificationGroups),
   approvedLocations: clone(seed.approvedLocations),
-  bookings: [] as Appointment[],
+  bookings: clone(seed.bookings),
   eConsents: clone(seed.eConsents),
   groupSessions: clone(seed.groupSessions),
   sponsorQueries: clone(seed.sponsorQueries),
@@ -1263,6 +1263,7 @@ export const subjectsApi = {
         subject.status = status
         changed.push(id)
         if (status === 'recruited') {
+          subject.recruitedAt = now()
           const study = db.studies.find((s) => s.id === subject.studyId)
           if (study) study.enrolled += 1
         }
@@ -1275,8 +1276,13 @@ export const subjectsApi = {
     write(() => {
       const subject = db.subjects.find((s) => s.id === id)
       if (!subject) throw new ApiError('Participant not found.', 'not_found')
+      // Only a real transition counts. Recruiting someone already recruited must
+      // not stamp a second enrolment date, nor inflate the study's `enrolled`
+      // tally — the batch setter above already guards itself this way.
+      const becameRecruited = status === 'recruited' && subject.status !== 'recruited'
       subject.status = status
-      if (status === 'recruited') {
+      if (becameRecruited) {
+        subject.recruitedAt = now()
         const study = db.studies.find((s) => s.id === subject.studyId)
         if (study) study.enrolled += 1
       }

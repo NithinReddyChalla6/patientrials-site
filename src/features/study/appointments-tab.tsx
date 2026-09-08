@@ -37,9 +37,10 @@ function describeSchedule(template: AppointmentTemplate) {
     template.hours ? `${String(template.hours).padStart(2, '0')}:00` : null,
   ].filter(Boolean)
   const when = parts.length > 0 ? parts.join(', ') : 'no timing set'
+  const slack = template.windowDays ? `, give or take ${template.windowDays} days` : ''
   return template.frequency === 'Recurring'
-    ? `Repeats from ${when} after enrolment`
-    : `Once at ${when} after enrolment`
+    ? `Repeats from ${when} after enrolment${slack}`
+    : `Once at ${when} after enrolment${slack}`
 }
 
 /**
@@ -232,12 +233,13 @@ function TemplateDialog({
   const [frequency, setFrequency] = React.useState<Frequency>('One time')
 
   const form = useForm({
-    initialValues: { name: '', week: '1', day: '1', hours: '09' },
+    initialValues: { name: '', week: '1', day: '1', hours: '09', windowDays: '0' },
     rules: {
       name: required('Name'),
       week: all(required('Week'), inRange(1, 104, 'Week')),
       day: all(required('Day'), inRange(1, 7, 'Day')),
       hours: all(required('Hour'), inRange(0, 23, 'Hour')),
+      windowDays: all(required('Window'), inRange(0, 30, 'Window')),
     },
     onSubmit: async (values) => {
       await appointmentsApi.create({
@@ -249,6 +251,7 @@ function TemplateDialog({
         week: values.week,
         day: values.day,
         hours: values.hours,
+        windowDays: Number(values.windowDays),
       })
       toast.success('Appointment template added')
       onSaved()
@@ -257,7 +260,7 @@ function TemplateDialog({
 
   React.useEffect(() => {
     if (!open) return
-    form.reset({ name: '', week: '1', day: '1', hours: '09' })
+    form.reset({ name: '', week: '1', day: '1', hours: '09', windowDays: '0' })
     setAssignedToId(undefined)
     setScheduleType('In person')
     setFrequency('One time')
@@ -355,7 +358,7 @@ function TemplateDialog({
               <p className="mb-3 mt-1 text-xs text-muted-foreground">
                 Counted from the day a participant enrols on the study.
               </p>
-              <div className="grid gap-4 sm:grid-cols-3">
+              <div className="grid gap-4 sm:grid-cols-2">
                 <FormField id="appointment-week" label="Week" error={form.errors.week} required>
                   {(aria) => <Input {...aria} {...form.field('week')} inputMode="numeric" />}
                 </FormField>
@@ -377,7 +380,20 @@ function TemplateDialog({
                 >
                   {(aria) => <Input {...aria} {...form.field('hours')} inputMode="numeric" />}
                 </FormField>
+                <FormField
+                  id="appointment-window"
+                  label="Window"
+                  hint="Days either side, 0 for none"
+                  error={form.errors.windowDays}
+                  required
+                >
+                  {(aria) => <Input {...aria} {...form.field('windowDays')} inputMode="numeric" />}
+                </FormField>
               </div>
+              <p className="mt-3 text-xs text-muted-foreground">
+                A visit booked outside its window is a protocol deviation. Visit compliance uses
+                this to work out who is late.
+              </p>
             </fieldset>
           </DialogBody>
 

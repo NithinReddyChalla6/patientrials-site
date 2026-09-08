@@ -1,5 +1,6 @@
 import {
   Building2,
+  CalendarCheck,
   CalendarClock,
   ClipboardCheck,
   ClipboardList,
@@ -124,6 +125,12 @@ export const STUDY_TABS: StudyTab[] = [
   { segment: 'medications', label: 'Medications', icon: Pill, permission: 'medication.manage' },
   { segment: 'econsents', label: 'Consent Documents', icon: FileSignature, permission: 'study.view' },
   { segment: 'appointments', label: 'Appointment Templates', icon: CalendarClock, permission: 'study.view' },
+  {
+    segment: 'visit-compliance',
+    label: 'Visit Compliance',
+    icon: CalendarCheck,
+    permission: 'appointment.manage',
+  },
   { segment: 'notifications', label: 'Notifications', icon: Inbox, permission: 'study.view' },
   { segment: 'pending-tasks', label: 'Pending Tasks', icon: ClipboardCheck, permission: 'study.view' },
   { segment: 'locations', label: 'Approved Locations', icon: Building2, permission: 'study.view' },
