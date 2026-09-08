@@ -1,5 +1,5 @@
 import * as React from 'react'
-import { CalendarCheck, MapPin, Plus, User, X } from 'lucide-react'
+import { CalendarCheck, MapPin, Pencil, Plus, User, X } from 'lucide-react'
 import { appointmentsApi, bookingsApi, formsApi, locationsApi, siteApi, subjectsApi, ApiError } from '@/data/api'
 import type {
   Appointment,
@@ -53,6 +53,7 @@ export function AppointmentBookings({ studyId }: { studyId: string }) {
 
   const [adding, setAdding] = React.useState(false)
   const [busyId, setBusyId] = React.useState<string>()
+  const [movingId, setMovingId] = React.useState<string>()
 
   const subjectById = React.useMemo(() => {
     const map = new Map<string, Subject>()
@@ -176,18 +177,41 @@ export function AppointmentBookings({ studyId }: { studyId: string }) {
                     canManage={canManage}
                     onChanged={state.reload}
                   />
+
+                  {canManage && movingId === booking.id && (
+                    <RescheduleForm
+                      booking={booking}
+                      locations={(locations.data ?? []).filter((l) => l.enabled)}
+                      onDone={() => {
+                        setMovingId(undefined)
+                        state.reload()
+                      }}
+                      onCancel={() => setMovingId(undefined)}
+                    />
+                  )}
                 </div>
 
                 {canManage && (
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => remove(booking)}
-                    disabled={busyId === booking.id}
-                    aria-label="Cancel this appointment"
-                  >
-                    <X aria-hidden="true" />
-                  </Button>
+                  <div className="flex shrink-0 items-center">
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => setMovingId(movingId === booking.id ? undefined : booking.id)}
+                      aria-expanded={movingId === booking.id}
+                      aria-label={`Move ${booking.description}`}
+                    >
+                      <Pencil aria-hidden="true" />
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => remove(booking)}
+                      disabled={busyId === booking.id}
+                      aria-label="Cancel this appointment"
+                    >
+                      <X aria-hidden="true" />
+                    </Button>
+                  </div>
                 )}
               </li>
             )
@@ -271,6 +295,102 @@ function ProtocolVisitTag({
         disabled={saving}
         className="h-8 w-full max-w-[18rem] text-xs"
       />
+    </div>
+  )
+}
+
+/**
+ * Moving a booked visit.
+ *
+ * Inline and limited to when and where, because those are what turn out wrong:
+ * a mistyped date, a slot that clashed, a room that changed. Who it is for and
+ * which protocol visit it satisfies are not editable here — those describe a
+ * different appointment, and cancelling is the honest way to say so.
+ */
+function RescheduleForm({
+  booking,
+  locations,
+  onDone,
+  onCancel,
+}: {
+  booking: Appointment
+  locations: ApprovedLocation[]
+  onDone: () => void
+  onCancel: () => void
+}) {
+  const toast = useToast()
+  const [date, setDate] = React.useState(booking.date)
+  const [timeSlot, setTimeSlot] = React.useState(booking.timeSlot)
+  const [locationId, setLocationId] = React.useState(booking.locationId ?? '')
+  const [error, setError] = React.useState<string>()
+  const [saving, setSaving] = React.useState(false)
+
+  async function save() {
+    setError(undefined)
+    setSaving(true)
+    try {
+      await bookingsApi.update(booking.id, { date, timeSlot, locationId: locationId || undefined })
+      toast.success('Appointment moved')
+      onDone()
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : 'We could not move this appointment.')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  return (
+    <div className="mt-3 rounded-md border border-border bg-sunken p-3">
+      {error && (
+        <div className="mb-3">
+          <Alert tone="error" title="We could not move this appointment">
+            {error}
+          </Alert>
+        </div>
+      )}
+
+      <div className="grid gap-3 sm:grid-cols-3">
+        <FormField id={`move-date-${booking.id}`} label="Date" required>
+          {(aria) => (
+            <Input {...aria} type="date" value={date} onChange={(e) => setDate(e.target.value)} />
+          )}
+        </FormField>
+
+        <FormField id={`move-time-${booking.id}`} label="Time" required>
+          {(aria) => (
+            <Select
+              {...aria}
+              value={timeSlot}
+              onChange={(e) => setTimeSlot(e.target.value)}
+              options={APPOINTMENT_SLOTS}
+            />
+          )}
+        </FormField>
+
+        {booking.scheduleType === 'In person' && (
+          <FormField id={`move-place-${booking.id}`} label="Location" required>
+            {(aria) => (
+              <Combobox
+                {...aria}
+                options={locations.map((l) => ({ value: l.id, label: l.facilityName }))}
+                value={locationId || undefined}
+                onChange={(value) => setLocationId(value ?? '')}
+                placeholder="Select a location"
+                searchPlaceholder="Search approved locations"
+              />
+            )}
+          </FormField>
+        )}
+      </div>
+
+      <div className="mt-3 flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+        <Button type="button" variant="ghost" size="sm" onClick={onCancel}>
+          Cancel
+        </Button>
+        <Button type="button" variant="brand" size="sm" onClick={save} loading={saving}>
+          Save changes
+        </Button>
+      </div>
     </div>
   )
 }

@@ -959,6 +959,45 @@ export const bookingsApi = {
       return clone(booking)
     }),
 
+  /**
+   * Move a booking to another date, time or place.
+   *
+   * Correcting a wrong date meant cancelling and rebooking, which loses the
+   * protocol visit it was tagged to and reads, to anyone looking later, as a
+   * visit that was called off. A booking that moved should look like one that
+   * moved.
+   */
+  update: (
+    id: string,
+    patch: { date: string; timeSlot: string; locationId?: string },
+  ) =>
+    write(() => {
+      const booking = db.bookings.find((b) => b.id === id)
+      if (!booking) throw new ApiError('Appointment not found.', 'not_found')
+      if (!patch.date || !patch.timeSlot) {
+        throw new ApiError('Choose a date and a time.', 'invalid')
+      }
+      if (booking.scheduleType === 'In person' && !patch.locationId) {
+        throw new ApiError('Choose where the visit takes place.', 'invalid')
+      }
+      // `b.id !== id` matters: without it a booking saved at its own existing
+      // time collides with itself and the save is refused.
+      const clash = db.bookings.some(
+        (b) =>
+          b.id !== id &&
+          b.subjectId === booking.subjectId &&
+          b.date === patch.date &&
+          b.timeSlot === patch.timeSlot,
+      )
+      if (clash) {
+        throw new ApiError('This participant already has an appointment at that time.', 'duplicate')
+      }
+      booking.date = patch.date
+      booking.timeSlot = patch.timeSlot
+      booking.locationId = booking.scheduleType === 'In person' ? patch.locationId : undefined
+      return clone(booking)
+    }),
+
   remove: (id: string) =>
     write(() => {
       db.bookings = db.bookings.filter((b) => b.id !== id)
