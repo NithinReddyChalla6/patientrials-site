@@ -1,11 +1,18 @@
 import * as React from 'react'
-import { useLocation } from 'react-router-dom'
-import { Bot, Send, Sparkles, X } from 'lucide-react'
+import { useLocation, useNavigate } from 'react-router-dom'
+import { ArrowRight, Bot, Send, Sparkles, X } from 'lucide-react'
 import { siteApi, studiesApi, subjectsApi, ApiError } from '@/data/api'
-import { ask, siteSummary, studySummary, type ChatTurn } from '@/data/assistant'
+import {
+  ask,
+  siteSummary,
+  studySummary,
+  type ChatTurn,
+  type Destination,
+} from '@/data/assistant'
 import { Textarea } from '@/components/ui/textarea'
 import { Button } from '@/components/ui/button'
 import { Alert } from '@/components/ui/alert'
+import { NAV_GROUPS, STUDY_TABS } from '@/components/layout/nav-config'
 import { useAuth } from '@/features/auth/auth-context'
 
 /** Openers, so the first thing on screen is not an empty box. */
@@ -19,7 +26,11 @@ function studyIdFrom(pathname: string): string | undefined {
   return id
 }
 
-function Bubble({ turn }: { turn: ChatTurn }) {
+interface Shown extends ChatTurn {
+  goTo?: Destination
+}
+
+function Bubble({ turn, onGo }: { turn: Shown; onGo: (d: Destination) => void }) {
   const mine = turn.role === 'user'
   return (
     <li className={mine ? 'flex justify-end' : 'flex gap-2'}>
@@ -39,6 +50,18 @@ function Bubble({ turn }: { turn: ChatTurn }) {
         }
       >
         <p className="whitespace-pre-wrap">{turn.content}</p>
+        {turn.goTo && (
+          // Offered, not taken. Jumping the page out from under someone who is
+          // mid-sentence is worse than the extra click.
+          <button
+            type="button"
+            onClick={() => onGo(turn.goTo!)}
+            className="mt-2 inline-flex items-center gap-1.5 rounded-full border border-brand/30 bg-card px-3 py-1 text-xs font-medium text-brand transition-colors hover:bg-accent/40"
+          >
+            Open {turn.goTo.label}
+            <ArrowRight className="size-3.5" aria-hidden="true" />
+          </button>
+        )}
       </div>
     </li>
   )
@@ -58,11 +81,12 @@ function Bubble({ turn }: { turn: ChatTurn }) {
  */
 export function AssistantDock() {
   const { pathname } = useLocation()
-  const { session } = useAuth()
+  const navigate = useNavigate()
+  const { session, can } = useAuth()
   const studyId = studyIdFrom(pathname)
 
   const [open, setOpen] = React.useState(false)
-  const [turns, setTurns] = React.useState<ChatTurn[]>([])
+  const [turns, setTurns] = React.useState<Shown[]>([])
   const [draft, setDraft] = React.useState('')
   const [thinking, setThinking] = React.useState(false)
   const [error, setError] = React.useState<string>()
@@ -90,6 +114,28 @@ export function AssistantDock() {
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
   }, [open])
+
+  /**
+   * The screens this person may be sent to.
+   *
+   * Read from the same nav tables the sidebar renders and filtered by the same
+   * permissions, so the assistant can never offer a door the signed-in role
+   * does not have. Built here rather than on the server for that reason: only
+   * the browser knows who is looking.
+   */
+  const destinations = React.useMemo<Destination[]>(() => {
+    const out: Destination[] = NAV_GROUPS.flatMap((g) =>
+      g.items
+        .filter((i) => !i.permission || can(i.permission))
+        .map((i) => ({ path: i.to, label: i.label })),
+    )
+    if (studyId) {
+      STUDY_TABS.filter((t) => !t.permission || can(t.permission)).forEach((t) =>
+        out.push({ path: `/studies/${studyId}/${t.segment}`, label: `${t.label} (${studyId})` }),
+      )
+    }
+    return out
+  }, [studyId, can])
 
   /**
    * Built at send time, not on open. The panel stays open while you navigate,
@@ -127,13 +173,13 @@ export function AssistantDock() {
 
     setError(undefined)
     setDraft('')
-    const next: ChatTurn[] = [...turns, { role: 'user', content: message }]
+    const next: Shown[] = [...turns, { role: 'user', content: message }]
     setTurns(next)
     setThinking(true)
 
     try {
-      const reply = await ask(next, await contextNow())
-      setTurns([...next, { role: 'assistant', content: reply }])
+      const answer = await ask(next, await contextNow(), destinations)
+      setTurns([...next, { role: 'assistant', content: answer.reply, goTo: answer.goTo }])
     } catch (err) {
       setError(err instanceof ApiError ? err.message : 'The assistant could not answer.')
     } finally {
@@ -214,7 +260,11 @@ export function AssistantDock() {
             ) : (
               <ul className="space-y-3">
                 {turns.map((turn, i) => (
-                  <Bubble key={`${turn.role}-${i}`} turn={turn} />
+                  <Bubble
+                    key={`${turn.role}-${i}`}
+                    turn={turn}
+                    onGo={(d) => navigate(d.path)}
+                  />
                 ))}
                 {thinking && (
                   <li className="flex gap-2">

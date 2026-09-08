@@ -6,6 +6,12 @@ export interface ChatTurn {
   content: string
 }
 
+/** Somewhere the assistant is allowed to send you. */
+export interface Destination {
+  path: string
+  label: string
+}
+
 /**
  * What the assistant is allowed to see.
  *
@@ -73,7 +79,17 @@ export function siteSummary(studies: Study[], investigators: Map<string, string>
  * Goes to our own server, never to the model provider: the API key lives there,
  * and a key shipped to the browser is a key anyone can read.
  */
-export async function ask(messages: ChatTurn[], context: string): Promise<string> {
+export interface Answer {
+  reply: string
+  /** Where it offered to take you, if anywhere. */
+  goTo?: Destination
+}
+
+export async function ask(
+  messages: ChatTurn[],
+  context: string,
+  destinations: Destination[],
+): Promise<Answer> {
   const token = authToken()
   if (!token) throw new ApiError('Sign in to use the assistant.', 'invalid')
 
@@ -82,14 +98,24 @@ export async function ask(messages: ChatTurn[], context: string): Promise<string
     res = await fetch(`${AUTH_API}/api/assistant`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-      body: JSON.stringify({ messages, context }),
+      body: JSON.stringify({ messages, context, destinations }),
     })
   } catch {
     throw new ApiError('We could not reach the assistant.', 'network')
   }
 
-  const body = (await res.json().catch(() => ({}))) as { reply?: string; error?: string }
+  const body = (await res.json().catch(() => ({}))) as {
+    reply?: string
+    navigateTo?: string
+    error?: string
+  }
   if (!res.ok) throw new ApiError(body.error ?? 'The assistant could not answer.', 'network')
   if (!body.reply) throw new ApiError('The assistant returned nothing.', 'network')
-  return body.reply
+
+  // Checked against the list we sent, not trusted from the reply. A model that
+  // invents a route would otherwise offer a link to a page that does not exist,
+  // or to one this person is not allowed to open.
+  const goTo = destinations.find((d) => d.path === body.navigateTo)
+
+  return { reply: body.reply, goTo }
 }

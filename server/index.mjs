@@ -257,7 +257,10 @@ How to format:
 What you can actually do, if asked:
 - Answer questions about the studies you are shown: status, recruitment, targets, who the investigator is, how many participants sit at each stage.
 - Explain what those numbers mean and which look worth attention.
-You cannot change anything, open screens, book visits, or see individual participants. Say so plainly rather than implying otherwise.
+- Offer to open a screen. When someone asks to see or go to something, call the open_screen tool with one of the paths you were given, and write your usual short reply as well. They get a button and decide whether to follow it.
+You cannot change anything, book visits, or see individual participants. Say so plainly rather than implying otherwise.
+
+Only ever pass a path from the list you were given, copied exactly. Never invent one. If nothing in the list fits, say where they would find it and do not call the tool.
 
 Two numbers about enrolment may appear and they can disagree: the study record's own enrolment counter, and how many participant records currently sit at status recruited. They measure different things. If both are present and they differ, give the one that was asked for and mention that the other says something else — do not silently pick one.
 
@@ -278,7 +281,7 @@ app.post('/api/assistant', async (req, res) => {
     })
   }
 
-  const { messages, context } = req.body ?? {}
+  const { messages, context, destinations } = req.body ?? {}
   if (!Array.isArray(messages) || messages.length === 0) {
     return res.status(400).json({ error: 'Nothing to answer.' })
   }
@@ -290,9 +293,20 @@ app.post('/api/assistant', async (req, res) => {
     content: String(m.content ?? '').slice(0, 4000),
   }))
 
-  const system = context
-    ? `${ASSISTANT_SYSTEM}\n\nHere is what you can see right now:\n${String(context).slice(0, 6000)}`
-    : ASSISTANT_SYSTEM
+  // The screens the browser says this person may open. It is both the menu the
+  // model chooses from and the list its answer is checked against below, so a
+  // route it invents cannot become a button.
+  const places = (Array.isArray(destinations) ? destinations : [])
+    .filter((d) => typeof d?.path === 'string' && typeof d?.label === 'string')
+    .slice(0, 40)
+
+  const system = [
+    ASSISTANT_SYSTEM,
+    context ? `\n\nHere is what you can see right now:\n${String(context).slice(0, 6000)}` : '',
+    places.length
+      ? `\n\nScreens you may offer to open:\n${places.map((d) => `- ${d.path} — ${d.label}`).join('\n')}`
+      : '',
+  ].join('')
 
   try {
     const upstream = await fetch(`${LLM_BASE_URL}/chat/completions`, {
@@ -306,6 +320,31 @@ app.post('/api/assistant', async (req, res) => {
         messages: [{ role: 'system', content: system }, ...recent],
         temperature: 0.6,
         max_tokens: 700,
+        ...(places.length
+          ? {
+              tools: [
+                {
+                  type: 'function',
+                  function: {
+                    name: 'open_screen',
+                    description:
+                      'Offer to take the person to a screen in the portal. Only paths from the list in the system message are allowed.',
+                    parameters: {
+                      type: 'object',
+                      properties: {
+                        path: {
+                          type: 'string',
+                          description: 'One of the listed paths, copied exactly.',
+                        },
+                      },
+                      required: ['path'],
+                    },
+                  },
+                },
+              ],
+              tool_choice: 'auto',
+            }
+          : {}),
       }),
     })
 
@@ -321,10 +360,35 @@ app.post('/api/assistant', async (req, res) => {
     }
 
     const body = await upstream.json()
-    const reply = body?.choices?.[0]?.message?.content?.trim()
-    if (!reply) return res.status(502).json({ error: 'The assistant returned nothing.' })
+    const message = body?.choices?.[0]?.message
+    const reply = message?.content?.trim()
 
-    res.json({ reply })
+    // A tool call is a suggestion, not an instruction. The path is passed on
+    // only if it is one we offered, so a route the model invents is dropped
+    // rather than becoming a button to a page that does not exist — or to one
+    // this person has no permission to open.
+    let navigateTo
+    for (const call of message?.tool_calls ?? []) {
+      if (call?.function?.name !== 'open_screen') continue
+      let wanted
+      try {
+        wanted = JSON.parse(call.function.arguments || '{}').path
+      } catch {
+        continue
+      }
+      if (places.some((d) => d.path === wanted)) {
+        navigateTo = wanted
+        break
+      }
+      console.warn('[assistant] ignored a path that was never offered:', wanted)
+    }
+
+    // Some models answer with a tool call and no prose. A bare button reads as
+    // the assistant having said nothing, so give it a sentence.
+    const text = reply || (navigateTo ? 'Here you go.' : '')
+    if (!text) return res.status(502).json({ error: 'The assistant returned nothing.' })
+
+    res.json({ reply: text, navigateTo })
   } catch (err) {
     console.error('[assistant] request failed', err)
     res.status(502).json({ error: 'The assistant could not be reached.' })
