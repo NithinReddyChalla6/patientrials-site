@@ -11,6 +11,7 @@ import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Switch } from '@/components/ui/switch'
 import { Alert } from '@/components/ui/alert'
+import { CheckboxField } from '@/components/ui/checkbox'
 import { useToast } from '@/components/ui/toast'
 import { FormField } from '@/components/patterns/form-field'
 import { FormSection } from '@/components/patterns/form-section'
@@ -57,6 +58,8 @@ export function TeamManager({
   // pass it on. Never stored.
   const [issued, setIssued] = React.useState<{ name: string; password: string } | null>(null)
   const [copied, setCopied] = React.useState(false)
+  // Accepted instead of copying: the clipboard can simply not be available.
+  const [saved, setSaved] = React.useState(false)
   const [busyId, setBusyId] = React.useState<string>()
 
   const form = useForm({
@@ -113,6 +116,7 @@ export function TeamManager({
         password: result.password,
       })
       setCopied(false)
+      setSaved(false)
       setResetTarget(null)
     } catch {
       toast.error('We could not reset the password', 'Please try again.')
@@ -293,16 +297,30 @@ export function TeamManager({
         onConfirm={confirmReset}
       />
 
-      <Dialog open={Boolean(issued)} onOpenChange={(open) => !open && setIssued(null)}>
-        <DialogContent>
+      {/*
+        The one dialog in the app that must not be dismissed by reflex.
+        Everywhere else, closing by Escape or a click outside costs a reopen;
+        here it destroys the only copy of a password that has already replaced
+        the holder's old one, stranding the account until an administrator
+        resets it again. So: no Escape, no click-outside, no X, and Done stays
+        disabled until the administrator says they have the password.
+      */}
+      <Dialog open={Boolean(issued)}>
+        <DialogContent
+          hideClose
+          onEscapeKeyDown={(event) => event.preventDefault()}
+          onPointerDownOutside={(event) => event.preventDefault()}
+          onInteractOutside={(event) => event.preventDefault()}
+        >
           <DialogHeader>
             <DialogTitle>New password for {issued?.name}</DialogTitle>
             <DialogDescription>
-              Pass this on yourself. It is shown once and cannot be looked up again. They will be
-              asked to choose their own password the next time they sign in.
+              Pass this on yourself. It is shown once and cannot be looked up again — if it is lost,
+              the account has to be reset a second time. They will be asked to choose their own
+              password the next time they sign in.
             </DialogDescription>
           </DialogHeader>
-          <DialogBody>
+          <DialogBody className="space-y-4">
             <div className="flex items-center gap-3 rounded-lg border border-border bg-sunken p-3">
               <code className="flex-1 select-all font-mono text-sm tracking-wide text-foreground">
                 {issued?.password}
@@ -324,9 +342,30 @@ export function TeamManager({
                 {copied ? 'Copied' : 'Copy'}
               </Button>
             </div>
+
+            {/*
+              The clipboard is not always available — an insecure origin or a
+              refused permission both fail silently — so copying cannot be the
+              only way out. Writing it down is a real answer and is accepted as
+              one.
+            */}
+            <CheckboxField
+              id="passwordSaved"
+              label="I have saved this password"
+              description="Copy it, or write it down somewhere you can find it."
+              checked={saved}
+              onCheckedChange={setSaved}
+            />
           </DialogBody>
           <DialogFooter>
-            <Button variant="brand" onClick={() => setIssued(null)}>
+            <Button
+              variant="brand"
+              disabled={!copied && !saved}
+              onClick={() => {
+                setIssued(null)
+                setSaved(false)
+              }}
+            >
               Done
             </Button>
           </DialogFooter>
