@@ -271,6 +271,58 @@ What you must never do:
 
 If you are unsure, say so. Being wrong about a study is worse than being unhelpful.`
 
+const WEEKDAYS = [
+  'sunday',
+  'monday',
+  'tuesday',
+  'wednesday',
+  'thursday',
+  'friday',
+  'saturday',
+]
+
+/**
+ * The date a phrase like "next Tuesday" actually means.
+ *
+ * Calendar arithmetic is the one part of a booking a small model gets wrong
+ * reliably: given today's date and weekday it still answered "next Tuesday"
+ * with a Saturday. Working it out here is deterministic and costs nothing, so
+ * the model's guess is only used for dates this cannot resolve.
+ *
+ * "This Friday" and "next Friday" both resolve to the next Friday after today.
+ * The two are used interchangeably when booking, and the card shows the weekday
+ * beside the date, so the reader settles any genuine ambiguity rather than a
+ * rule nobody agreed on.
+ */
+function dateFromPhrase(text, today = new Date()) {
+  const said = String(text ?? '').toLowerCase()
+  const at = (d) => d.toISOString().slice(0, 10)
+  const shifted = (days) => {
+    const d = new Date(today)
+    d.setDate(d.getDate() + days)
+    return at(d)
+  }
+
+  // Checked before the weekday names, so a sentence saying both does not have
+  // "tomorrow" beaten by a day mentioned later in it.
+  if (/\btomorrow\b/.test(said)) return shifted(1)
+  if (/\btoday\b/.test(said)) return shifted(0)
+
+  const inDays = /\bin (\d{1,2}) days?\b/.exec(said)
+  if (inDays) return shifted(Number(inDays[1]))
+
+  const named = new RegExp(String.raw`\b(${WEEKDAYS.join("|")})\b`).exec(said)
+  if (named) {
+    const wanted = WEEKDAYS.indexOf(named[1])
+    // Strictly after today, so "this Friday" said on a Friday means the next
+    // one rather than a booking in the past.
+    const ahead = (wanted - today.getDay() + 7) % 7 || 7
+    return shifted(ahead)
+  }
+
+  return undefined
+}
+
 app.post('/api/assistant', async (req, res) => {
   const caller = await currentUser(req)
   if (!caller) return res.status(401).json({ error: 'Not signed in.' })
@@ -429,10 +481,13 @@ Today is ${new Date().toLocaleDateString('en-GB', {
       // records, and those are in the browser — which is also the only place
       // that can tell whether the person meant anyone real.
       if (call.function.name === 'propose_booking' && args.participant && args.date) {
+        // The phrase the person used beats the model's arithmetic wherever it
+        // can be read; the model's date is the fallback for everything else.
+        const asked = recent.filter((m) => m.role === 'user').at(-1)?.content
         proposal = {
           participant: String(args.participant).slice(0, 120),
           visit: args.visit ? String(args.visit).slice(0, 120) : undefined,
-          date: String(args.date).slice(0, 10),
+          date: dateFromPhrase(asked) ?? String(args.date).slice(0, 10),
           time: args.time ? String(args.time).slice(0, 20) : undefined,
         }
       }
