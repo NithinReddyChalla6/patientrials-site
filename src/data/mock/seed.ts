@@ -883,6 +883,9 @@ export const eConsents: EConsent[] = [
         desiredAnswer: 'Yes',
       },
     ],
+    interactions: [
+      { type: 'Video', link: 'https://example.org/consent/main-v4-overview' },
+    ],
     createdAt: daysAgo(58),
   },
   {
@@ -897,6 +900,8 @@ export const eConsents: EConsent[] = [
         desiredAnswer: 'Yes',
       },
     ],
+    // Not every consent has one, which is why the step is skippable.
+    interactions: [],
     createdAt: daysAgo(21),
   },
 ]
@@ -970,7 +975,7 @@ export const studyAssets: StudyAsset[] = [
   {
     id: 'AST-4001',
     studyId: 'STU01268',
-    type: 'Protocol',
+    type: 'Protocol doc',
     title: 'Protocol v3.2, amended dosing schedule',
     link: 'https://assets.patientrials.com/STU01268/protocol-v3-2.pdf',
     description: 'Current protocol, including the amended dosing schedule agreed in March.',
@@ -983,7 +988,7 @@ export const studyAssets: StudyAsset[] = [
   {
     id: 'AST-4002',
     studyId: 'STU01268',
-    type: 'Participant guide',
+    type: 'Patient Material',
     title: 'What to expect at your first visit',
     link: '',
     description: 'Plain-language walkthrough of the screening visit, given to participants at consent.',
@@ -996,7 +1001,7 @@ export const studyAssets: StudyAsset[] = [
   {
     id: 'AST-4003',
     studyId: 'STU01268',
-    type: 'Training material',
+    type: 'Patient Material',
     title: 'Infusion handling refresher',
     link: '',
     description: 'Short refresher for nursing staff on preparation and handling.',
@@ -1006,7 +1011,7 @@ export const studyAssets: StudyAsset[] = [
   {
     id: 'AST-4004',
     studyId: 'STU01359',
-    type: 'Recruitment material',
+    type: 'Marketing Material',
     title: 'Clinic waiting room poster',
     link: 'https://assets.patientrials.com/STU01359/poster-a3.pdf',
     description: 'A3 poster for the cardiology waiting room.',

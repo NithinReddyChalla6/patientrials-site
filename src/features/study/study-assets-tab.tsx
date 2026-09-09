@@ -282,7 +282,7 @@ function AssetPanel({
               )}
             </FormField>
 
-            <FormField id="assetTitle" label="Asset title" error={form.errors.title} required>
+            <FormField id="assetTitle" label="Title" error={form.errors.title} required>
               {(aria) => <Input {...aria} {...form.field('title')} />}
             </FormField>
 

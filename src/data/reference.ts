@@ -162,14 +162,22 @@ export const DAYS_OF_WEEK = [
 ]
 
 /** What a study asset is, so the list can be scanned by kind. */
+/**
+ * The four kinds of study asset, as the legacy portal named them.
+ *
+ * Its list was Marketing Material, Patient Material, Protocol doc and Video
+ * Links. This build had invented a longer, tidier set — which reads better and
+ * matches nothing anyone already uses.
+ */
 export const ASSET_TYPES = [
-  'Protocol',
-  'Investigator brochure',
-  'Training material',
-  'Recruitment material',
-  'Participant guide',
-  'Regulatory document',
+  'Marketing Material',
+  'Patient Material',
+  'Protocol doc',
+  'Video Links',
 ]
+
+/** What a participant can be given alongside a consent document. */
+export const INTERACTION_TYPES = ['Video']
 
 /** Who an asset is published to. */
 export const ASSET_AUDIENCES = ['Participants', 'Site staff', 'Sponsor']

@@ -1,10 +1,12 @@
 import * as React from 'react'
 import { FileSignature, Plus, ShieldCheck, Trash2, X } from 'lucide-react'
 import { eConsentsApi, ApiError } from '@/data/api'
-import type { ConsentQuestion, EConsent } from '@/data/types'
+import type { ConsentInteraction, ConsentQuestion, EConsent } from '@/data/types'
 import { useAsync } from '@/lib/use-async'
 import { formatRelative } from '@/lib/format'
+import { Input } from '@/components/ui/input'
 import { Select } from '@/components/ui/select'
+import { INTERACTION_TYPES } from '@/data/reference'
 import { Textarea } from '@/components/ui/textarea'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
@@ -20,7 +22,7 @@ import { useAuth } from '@/features/auth/auth-context'
 import { useStudy } from './study-layout'
 
 const ANSWERS = ['Yes', 'No']
-const STEPS = ['Details', 'Document', 'Questions'] as const
+const STEPS = ['Details', 'Document', 'Questions', 'Interactions'] as const
 
 /**
  * Consent documents a participant signs electronically.
@@ -77,6 +79,14 @@ export function EConsentsTab() {
             <h3 className="text-sm font-semibold uppercase tracking-[0.06em] text-muted-foreground">
               {consents.length === 0 ? 'None added' : `${consents.length} added`}
             </h3>
+            {/* Removed once as clutter, which left the wizard with no way in:
+                nothing else on this screen creates a consent. */}
+            {canManage && !adding && (
+              <Button variant="outline" size="sm" onClick={() => setAdding(true)}>
+                <Plus aria-hidden="true" />
+                Add eConsent
+              </Button>
+            )}
           </div>
 
           {canManage && adding && (
@@ -153,6 +163,31 @@ export function EConsentsTab() {
                       ))}
                     </ul>
                   </div>
+
+                  {(consent.interactions?.length ?? 0) > 0 && (
+                    <div className="mt-3 rounded-md border border-border bg-sunken p-3">
+                      <p className="text-xs font-medium uppercase tracking-[0.06em] text-muted-foreground">
+                        {consent.interactions?.length === 1
+                          ? '1 interaction'
+                          : `${consent.interactions?.length ?? 0} interactions`}
+                      </p>
+                      <ul className="mt-2 space-y-1.5">
+                        {(consent.interactions ?? []).map((item, i) => (
+                          <li key={`${item.link}-${i}`} className="text-sm text-foreground">
+                            {item.type}
+                            <a
+                              href={item.link}
+                              target="_blank"
+                              rel="noreferrer"
+                              className="ml-2 break-all text-xs text-brand underline-offset-4 hover:underline"
+                            >
+                              {item.link}
+                            </a>
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
                 </li>
               ))}
             </ul>
@@ -179,6 +214,9 @@ function ConsentWizard({
   const [witnessRequired, setWitnessRequired] = React.useState(false)
   const [file, setFile] = React.useState<File | null>(null)
   const [questions, setQuestions] = React.useState<ConsentQuestion[]>([])
+  const [interactions, setInteractions] = React.useState<ConsentInteraction[]>([])
+  const [interactionType, setInteractionType] = React.useState(INTERACTION_TYPES[0])
+  const [interactionLink, setInteractionLink] = React.useState('')
   const [question, setQuestion] = React.useState('')
   const [desiredAnswer, setDesiredAnswer] = React.useState('Yes')
   const [error, setError] = React.useState<string>()
@@ -218,6 +256,7 @@ function ConsentWizard({
         witnessRequired,
         documentName: file?.name,
         questions,
+        interactions,
       })
       toast.success('eConsent created', 'Participants can now be asked to sign it.')
       onDone()
@@ -372,6 +411,87 @@ function ConsentWizard({
                 Add Question
               </Button>
             </div>
+          </>
+        )}
+
+        {step === 3 && (
+          <>
+            <div className="rounded-md border border-border bg-sunken p-3">
+              <p className="text-xs font-medium uppercase tracking-[0.06em] text-muted-foreground">
+                {interactions.length === 0 ? 'None added' : `${interactions.length} added`}
+              </p>
+              {interactions.length > 0 && (
+                <ul className="mt-2 space-y-1.5">
+                  {interactions.map((item, i) => (
+                    <li
+                      key={`${item.link}-${i}`}
+                      className="flex items-start justify-between gap-3 text-sm text-foreground"
+                    >
+                      <span className="min-w-0 break-all">
+                        {item.type}
+                        <span className="ml-2 text-xs text-muted-foreground">{item.link}</span>
+                      </span>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => setInteractions((prev) => prev.filter((_, j) => j !== i))}
+                        aria-label={`Remove interaction ${i + 1}`}
+                      >
+                        <X aria-hidden="true" />
+                      </Button>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
+
+            <div className="grid gap-4 sm:grid-cols-[10rem_minmax(0,1fr)]">
+              <FormField id="interactionType" label="Type">
+                {(aria) => (
+                  <Select
+                    {...aria}
+                    value={interactionType}
+                    onChange={(e) => setInteractionType(e.target.value)}
+                    options={INTERACTION_TYPES}
+                  />
+                )}
+              </FormField>
+
+              <FormField
+                id="interactionLink"
+                label="Video link"
+                hint="Where the participant watches it."
+              >
+                {(aria) => (
+                  <Input
+                    {...aria}
+                    value={interactionLink}
+                    onChange={(e) => setInteractionLink(e.target.value)}
+                    type="url"
+                    inputMode="url"
+                    placeholder="https://"
+                  />
+                )}
+              </FormField>
+            </div>
+
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => {
+                setError(undefined)
+                const link = interactionLink.trim()
+                if (!link) {
+                  setError('Paste the link before adding it.')
+                  return
+                }
+                setInteractions((prev) => [...prev, { type: interactionType, link }])
+                setInteractionLink('')
+              }}
+            >
+              <Plus aria-hidden="true" />
+              Add interaction
+            </Button>
           </>
         )}
 

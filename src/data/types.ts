@@ -201,6 +201,17 @@ export interface ConsentQuestion {
 }
 
 /** A consent document a participant signs electronically. */
+/**
+ * Something a participant watches or reads alongside the document.
+ *
+ * The legacy wizard called this step Interactions and offered a type and a
+ * link — a consent video sits beside the PDF rather than inside it.
+ */
+export interface ConsentInteraction {
+  type: string
+  link: string
+}
+
 export interface EConsent {
   id: string
   studyId: string
@@ -209,6 +220,12 @@ export interface EConsent {
   witnessRequired: boolean
   documentName?: string
   questions: ConsentQuestion[]
+  /**
+   * Optional because consents saved before this field existed do not have it.
+   * A stored record is older than the code reading it, and treating it as
+   * required crashed the screen on exactly those rows.
+   */
+  interactions?: ConsentInteraction[]
   createdAt: string
 }
 
