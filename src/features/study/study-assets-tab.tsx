@@ -2,7 +2,7 @@ import * as React from 'react'
 import { FileText, Plus, Upload, X } from 'lucide-react'
 import { studyAssetsApi, ApiError } from '@/data/api'
 import type { StudyAsset } from '@/data/types'
-import { ASSET_AUDIENCES, ASSET_TYPES } from '@/data/reference'
+import { ASSET_AUDIENCES, ASSET_TYPES, PRIMARY_LANGUAGES } from '@/data/reference'
 import { useAsync } from '@/lib/use-async'
 import { useForm } from '@/lib/use-form'
 import { required } from '@/lib/validators'
@@ -130,6 +130,7 @@ export function StudyAssetsTab() {
                       <p className="mt-0.5 text-xs text-muted-foreground">{asset.description}</p>
                       <p className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
                         {asset.documentName && <span>{asset.documentName}</span>}
+                        {asset.language && <span>{asset.language}</span>}
                         {asset.targetAudience && <span>For {asset.targetAudience}</span>}
                         <span>Added {formatRelative(asset.createdAt)}</span>
                       </p>
@@ -198,9 +199,20 @@ function AssetPanel({
   // Which button was pressed, read inside the single submit handler.
   const intent = React.useRef<'save' | 'publish'>('save')
 
+  // The offered types, plus whatever this asset already has. Categories change;
+  // records written under the old ones do not rewrite themselves.
+  const typeOptions = React.useMemo(
+    () =>
+      editing?.type && !ASSET_TYPES.includes(editing.type)
+        ? [...ASSET_TYPES, editing.type]
+        : ASSET_TYPES,
+    [editing?.type],
+  )
+
   const form = useForm({
     initialValues: {
       type: editing?.type ?? '',
+      language: editing?.language ?? 'English',
       title: editing?.title ?? '',
       link: editing?.link ?? '',
       description: editing?.description ?? '',
@@ -276,9 +288,19 @@ function AssetPanel({
                 <Select
                   {...aria}
                   {...form.field('type')}
-                  options={ASSET_TYPES}
+                  // An asset stored under a type this build no longer offers
+                  // keeps it in the list, rather than opening with an empty
+                  // picker that quietly discards it on the next save.
+                  options={typeOptions}
                   placeholder="Select a type"
                 />
+              )}
+            </FormField>
+
+            {/* Beside the type, as it sits in the form this replaces. */}
+            <FormField id="assetLanguage" label="Language">
+              {(aria) => (
+                <Select {...aria} {...form.field('language')} options={PRIMARY_LANGUAGES} />
               )}
             </FormField>
 

@@ -309,6 +309,12 @@ export interface StudyAsset {
   /** Optional link to where the material is hosted. */
   link: string
   description: string
+  /**
+   * What language the material is written in. Optional: assets stored before
+   * this field existed do not carry one, and the form is the only thing that
+   * can tell you.
+   */
+  language?: string
   /** File name only; nothing is stored in this build. */
   documentName?: string
   targetAudience?: string
