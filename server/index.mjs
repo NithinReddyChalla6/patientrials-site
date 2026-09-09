@@ -25,8 +25,42 @@ import {
  * backends are interchangeable.
  */
 const PORT = process.env.PORT || 3001
-const JWT_SECRET = process.env.JWT_SECRET || 'patientrials-dev-secret-change-in-prod'
 const TOKEN_TTL = '12h'
+
+/**
+ * The development-only signing secret.
+ *
+ * A JWT signed with a secret anyone can read is a session anyone can forge, so
+ * this literal must never sign a real login. It is allowed only in local
+ * development, where there is no real data behind it; the moment the app runs
+ * anywhere that looks like production it is refused (see the guard below).
+ */
+const DEV_JWT_SECRET = 'patientrials-dev-secret-change-in-prod'
+const JWT_SECRET = process.env.JWT_SECRET || DEV_JWT_SECRET
+
+// What counts as production. A configured database is this codebase's own
+// signal for it (DATABASE_URL is what selects Postgres over the local SQLite
+// file); NODE_ENV and Render's own flag are caught too, so the guard still
+// fires on a host where someone forgot to set the database URL.
+const IS_PRODUCTION =
+  Boolean(process.env.DATABASE_URL) ||
+  process.env.NODE_ENV === 'production' ||
+  Boolean(process.env.RENDER)
+
+// Refuse to start on the public dev secret in production rather than come up
+// quietly insecure: with it, anyone who has read this repository can forge an
+// administrator's token and read every participant record. A loud crash that
+// says exactly what to set is the safe failure.
+if (IS_PRODUCTION && JWT_SECRET === DEV_JWT_SECRET) {
+  console.error(
+    '[auth] FATAL: JWT_SECRET is not set, so sessions would be signed with the ' +
+      'public development secret — anyone could forge a login. Set JWT_SECRET to a ' +
+      "long random value in the host's environment (Render → Environment) and " +
+      'redeploy. Generate one with: ' +
+      'node -e "console.log(require(\'crypto\').randomBytes(48).toString(\'base64url\'))"',
+  )
+  process.exit(1)
+}
 
 const app = express()
 app.use(cors())
