@@ -289,7 +289,7 @@ function AssetPanel({
             <FullWidth>
               <FormField
                 id="assetLink"
-                label="Link"
+                label="Asset link"
                 hint="Optional. Where the material is hosted, if it lives elsewhere."
               >
                 {(aria) => (
