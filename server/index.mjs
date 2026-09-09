@@ -87,6 +87,28 @@ function sessionFor(row) {
   return { token, user, siteId: user.siteId }
 }
 
+/** The only site this build serves; registration cannot pick another. */
+const DEFAULT_SITE_ID = 'SITE-MDASIT10'
+
+/**
+ * Roles someone may ask for when registering themselves.
+ *
+ * Anything outside this set becomes `clinical_staff`. Roles that can reset
+ * passwords, add people or edit the site are not on it — those are granted by
+ * an administrator, not claimed.
+ */
+const SELF_REGISTRATION_ROLES = new Set(['site_administrator', 'clinical_staff'])
+
+/** Whether anyone already administers this site. */
+async function siteHasAdministrator() {
+  const state = await getSiteState()
+  const known = Array.isArray(state?.users) ? state.users : []
+  if (known.some((u) => u?.role === 'site_administrator')) return true
+  // The site record is not the authority on accounts, so ask the accounts too.
+  const seeded = await findUserByEmail('nick.wilde@plano-research.com')
+  return Boolean(seeded)
+}
+
 app.get('/api/health', (_req, res) => res.json({ ok: true }))
 
 app.post('/api/auth/login', async (req, res) => {
@@ -117,13 +139,29 @@ app.post('/api/auth/register', async (req, res) => {
   if (await emailExists(email)) {
     return res.status(409).json({ error: 'An account already exists for this email address.' })
   }
+  // Roles are decided here, never taken from the request. This endpoint is
+  // open to anyone, and it used to hand out whatever `role` and `siteId` the
+  // caller asked for: a stranger could post `site_administrator` on the
+  // existing site and then read every participant record and reset the real
+  // administrator's password. The registration form's own choice of role is
+  // just a form field, and a form field is not a permission.
+  const wanted = SELF_REGISTRATION_ROLES.has(role) ? role : 'clinical_staff'
+
+  // Administrator is only ever granted to the first person on a site that has
+  // none. This build seeds one, so in practice self-registration never grants
+  // it: joining an established site is something its administrator does, on
+  // the Team screen, deliberately. The check stays because a build without
+  // seeded accounts still needs a way in.
+  const admin = await siteHasAdministrator()
+  const granted = wanted === 'site_administrator' && admin ? 'clinical_staff' : wanted
+
   const row = await createUser({
     firstName,
     lastName,
     email,
     password: String(password),
-    role: role || 'site_administrator',
-    siteId: siteId || 'SITE-MDASIT10',
+    role: granted,
+    siteId: DEFAULT_SITE_ID,
   })
   res.status(201).json({ user: toPublicUser(row) })
 })
