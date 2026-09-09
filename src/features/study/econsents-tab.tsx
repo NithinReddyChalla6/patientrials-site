@@ -1,12 +1,11 @@
 import * as React from 'react'
-import { FileSignature, Plus, ShieldCheck, Trash2, X } from 'lucide-react'
+import { ChevronRight, FileSignature, Plus, ShieldCheck, Trash2, X } from 'lucide-react'
 import { eConsentsApi, ApiError } from '@/data/api'
 import type { ConsentInteraction, ConsentQuestion, EConsent } from '@/data/types'
 import { useAsync } from '@/lib/use-async'
 import { formatRelative } from '@/lib/format'
-import { Input } from '@/components/ui/input'
+import { forgetDocument, saveDocument } from '@/lib/document-store'
 import { Select } from '@/components/ui/select'
-import { INTERACTION_TYPES } from '@/data/reference'
 import { Textarea } from '@/components/ui/textarea'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
@@ -20,6 +19,13 @@ import { EmptyState } from '@/components/patterns/empty-state'
 import { AsyncBoundary } from '@/components/patterns/async-boundary'
 import { useAuth } from '@/features/auth/auth-context'
 import { useStudy } from './study-layout'
+import { ConsentRecord } from './consent-record'
+import {
+  InteractionFields,
+  blankInteraction,
+  cleanInteraction,
+  interactionProblem,
+} from './consent-interaction'
 
 const ANSWERS = ['Yes', 'No']
 const STEPS = ['Details', 'Document', 'Questions', 'Interactions'] as const
@@ -29,9 +35,12 @@ const STEPS = ['Details', 'Document', 'Questions', 'Interactions'] as const
  *
  * The legacy wizard wrote the record on its first step, then asked you to
  * confirm the uploaded file in a modal that said only "YES", then took the
- * comprehension questions one at a time. Here the three steps remain, the
- * uploaded file is simply shown so there is nothing to confirm blind, and the
- * consent is written once at the end, so abandoning it leaves nothing behind.
+ * comprehension questions one at a time. Here the steps remain, the uploaded
+ * file is simply shown so there is nothing to confirm blind, and the consent is
+ * written once at the end, so abandoning it leaves nothing behind.
+ *
+ * Opening one shows the record, where it can be edited, laid out in the
+ * designer, copied, and given interactions.
  */
 export function EConsentsTab() {
   const { study } = useStudy()
@@ -41,12 +50,16 @@ export function EConsentsTab() {
 
   const state = useAsync(() => eConsentsApi.list(study.id), [study.id])
   const [adding, setAdding] = React.useState(false)
+  const [openId, setOpenId] = React.useState<string>()
   const [busyId, setBusyId] = React.useState<string>()
 
   async function remove(consent: EConsent) {
     setBusyId(consent.id)
     try {
       await eConsentsApi.remove(consent.id)
+      // Otherwise the document outlives the record that explained what it was,
+      // and sits in this browser's storage with nothing able to reach it.
+      await forgetDocument(consent.id)
       toast.success('Consent removed')
       state.reload()
     } finally {
@@ -65,140 +78,163 @@ export function EConsentsTab() {
       }
       errorTitle="We could not load the consents for this study"
     >
-      {(consents) => (
-        <div className="space-y-6">
-          <div>
-            <h2 className="text-lg font-semibold text-foreground">eConsents</h2>
-            <p className="mt-1 max-w-2xl text-sm text-muted-foreground">
-              The consent documents participants sign for this study, and the questions that check
-              they understood what they signed.
-            </p>
-          </div>
-
-          <div className="flex items-center justify-between gap-4">
-            <h3 className="text-sm font-semibold uppercase tracking-[0.06em] text-muted-foreground">
-              {consents.length === 0 ? 'None added' : `${consents.length} added`}
-            </h3>
-            {/* Removed once as clutter, which left the wizard with no way in:
-                nothing else on this screen creates a consent. */}
-            {canManage && !adding && (
-              <Button variant="outline" size="sm" onClick={() => setAdding(true)}>
-                <Plus aria-hidden="true" />
-                Add eConsent
-              </Button>
-            )}
-          </div>
-
-          {canManage && adding && (
-            <ConsentWizard
-              studyId={study.id}
-              onDone={() => {
-                setAdding(false)
-                state.reload()
-              }}
-              onCancel={() => setAdding(false)}
+      {(consents) => {
+        // Falls back to the list when the open record has gone — a consent
+        // removed in another tab should not leave this one on a blank screen.
+        const open = openId ? consents.find((c) => c.id === openId) : undefined
+        if (open) {
+          return (
+            <ConsentRecord
+              consent={open}
+              canManage={canManage}
+              onBack={() => setOpenId(undefined)}
+              onChanged={state.reload}
+              onOpenCopy={setOpenId}
             />
-          )}
+          )
+        }
 
-          {consents.length === 0 ? (
-            <div className="rounded-lg border border-dashed border-border bg-card">
-              <EmptyState
-                compact
-                icon={FileSignature}
-                title="No consents yet"
-                description="Add the consent document participants sign before taking part."
-              />
+        return (
+          <div className="space-y-6">
+            <div>
+              <h2 className="text-lg font-semibold text-foreground">eConsents</h2>
+              <p className="mt-1 max-w-2xl text-sm text-muted-foreground">
+                The consent documents participants sign for this study, and the questions that check
+                they understood what they signed.
+              </p>
             </div>
-          ) : (
-            <ul className="space-y-3">
-              {consents.map((consent) => (
-                <li
-                  key={consent.id}
-                  className="rounded-lg border border-border bg-card p-4 shadow-sm"
-                >
-                  <div className="flex flex-wrap items-start justify-between gap-3">
-                    <div className="min-w-0">
-                      <p className="flex flex-wrap items-center gap-2 text-sm font-medium text-foreground">
-                        {consent.description}
+
+            <div className="flex items-center justify-between gap-4">
+              <h3 className="text-sm font-semibold uppercase tracking-[0.06em] text-muted-foreground">
+                {consents.length === 0 ? 'None added' : `${consents.length} added`}
+              </h3>
+              {/* Removed once as clutter, which left the wizard with no way in:
+                  nothing else on this screen creates a consent. */}
+              {canManage && !adding && (
+                <Button variant="outline" size="sm" onClick={() => setAdding(true)}>
+                  <Plus aria-hidden="true" />
+                  Add eConsent
+                </Button>
+              )}
+            </div>
+
+            {canManage && adding && (
+              <ConsentWizard
+                studyId={study.id}
+                onDone={() => {
+                  setAdding(false)
+                  state.reload()
+                }}
+                onCancel={() => setAdding(false)}
+              />
+            )}
+
+            {consents.length === 0 ? (
+              <div className="rounded-lg border border-dashed border-border bg-card">
+                <EmptyState
+                  compact
+                  icon={FileSignature}
+                  title="No consents yet"
+                  description="Add the consent document participants sign before taking part."
+                />
+              </div>
+            ) : (
+              <ul className="space-y-3">
+                {consents.map((consent) => (
+                  <li
+                    key={consent.id}
+                    className="rounded-lg border border-border bg-card p-4 shadow-sm"
+                  >
+                    <div className="flex flex-wrap items-start justify-between gap-3">
+                      <div className="min-w-0">
+                        {/* The card title is the way in to the record, the way
+                            the legacy list opened one. */}
+                        <button
+                          type="button"
+                          onClick={() => setOpenId(consent.id)}
+                          className="flex flex-wrap items-center gap-2 text-left text-sm font-medium text-foreground underline-offset-4 hover:underline"
+                        >
+                          {consent.description}
+                          <ChevronRight
+                            className="size-3.5 text-muted-foreground"
+                            aria-hidden="true"
+                          />
+                          <span className="sr-only">Open this consent</span>
+                        </button>
                         {consent.witnessRequired && (
-                          <Badge tone="info">
+                          <Badge tone="info" className="ml-0 mt-1.5">
                             <ShieldCheck className="size-3" aria-hidden="true" />
                             Witness required
                           </Badge>
                         )}
-                      </p>
-                      <p className="mt-1 flex flex-wrap items-center gap-x-3 text-xs text-muted-foreground">
-                        <span className="id">{consent.id}</span>
-                        {consent.documentName && <span>{consent.documentName}</span>}
-                        <span>Added {formatRelative(consent.createdAt)}</span>
-                      </p>
+                        <p className="mt-1 flex flex-wrap items-center gap-x-3 text-xs text-muted-foreground">
+                          <span className="id">{consent.id}</span>
+                          {consent.documentName && <span>{consent.documentName}</span>}
+                          <span>Added {formatRelative(consent.createdAt)}</span>
+                        </p>
+                      </div>
+                      {canManage && (
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => remove(consent)}
+                          disabled={busyId === consent.id}
+                          aria-label={`Remove ${consent.description}`}
+                        >
+                          <Trash2 aria-hidden="true" />
+                        </Button>
+                      )}
                     </div>
-                    {canManage && (
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => remove(consent)}
-                        disabled={busyId === consent.id}
-                        aria-label={`Remove ${consent.description}`}
-                      >
-                        <Trash2 aria-hidden="true" />
-                      </Button>
-                    )}
-                  </div>
 
-                  <div className="mt-3 rounded-md border border-border bg-sunken p-3">
-                    <p className="text-xs font-medium uppercase tracking-[0.06em] text-muted-foreground">
-                      {consent.questions.length === 1
-                        ? '1 comprehension question'
-                        : `${consent.questions.length} comprehension questions`}
-                    </p>
-                    <ul className="mt-2 space-y-1.5">
-                      {consent.questions.map((q) => (
-                        <li key={q.question} className="text-sm text-foreground">
-                          {q.question}
-                          <span className="ml-2 text-xs text-muted-foreground">
-                            Expected: {q.desiredAnswer}
-                          </span>
-                        </li>
-                      ))}
-                    </ul>
-                  </div>
-
-                  {(consent.interactions?.length ?? 0) > 0 && (
                     <div className="mt-3 rounded-md border border-border bg-sunken p-3">
                       <p className="text-xs font-medium uppercase tracking-[0.06em] text-muted-foreground">
-                        {consent.interactions?.length === 1
-                          ? '1 interaction'
-                          : `${consent.interactions?.length ?? 0} interactions`}
+                        {consent.questions.length === 1
+                          ? '1 comprehension question'
+                          : `${consent.questions.length} comprehension questions`}
                       </p>
                       <ul className="mt-2 space-y-1.5">
-                        {(consent.interactions ?? []).map((item, i) => (
-                          <li key={`${item.link}-${i}`} className="text-sm text-foreground">
-                            {item.type}
-                            <a
-                              href={item.link}
-                              target="_blank"
-                              rel="noreferrer"
-                              className="ml-2 break-all text-xs text-brand underline-offset-4 hover:underline"
-                            >
-                              {item.link}
-                            </a>
+                        {consent.questions.map((q) => (
+                          <li key={q.question} className="text-sm text-foreground">
+                            {q.question}
+                            <span className="ml-2 text-xs text-muted-foreground">
+                              Expected: {q.desiredAnswer}
+                            </span>
                           </li>
                         ))}
                       </ul>
                     </div>
-                  )}
-                </li>
-              ))}
-            </ul>
-          )}
-        </div>
-      )}
+
+                    {(consent.interactions?.length ?? 0) > 0 && (
+                      <div className="mt-3 rounded-md border border-border bg-sunken p-3">
+                        <p className="text-xs font-medium uppercase tracking-[0.06em] text-muted-foreground">
+                          {consent.interactions?.length === 1
+                            ? '1 interaction'
+                            : `${consent.interactions?.length ?? 0} interactions`}
+                        </p>
+                        <ul className="mt-2 space-y-1.5">
+                          {(consent.interactions ?? []).map((item, i) => (
+                            <li key={`${item.link}-${i}`} className="text-sm text-foreground">
+                              {item.type}
+                              <span className="ml-2 text-xs text-muted-foreground">
+                                {item.question || item.link}
+                              </span>
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+                    )}
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+        )
+      }}
     </AsyncBoundary>
   )
 }
 
-/** The three-step build: what it covers, the document, then the questions. */
+/** The four-step build: what it covers, the document, the questions, the extras. */
 function ConsentWizard({
   studyId,
   onDone,
@@ -215,8 +251,7 @@ function ConsentWizard({
   const [file, setFile] = React.useState<File | null>(null)
   const [questions, setQuestions] = React.useState<ConsentQuestion[]>([])
   const [interactions, setInteractions] = React.useState<ConsentInteraction[]>([])
-  const [interactionType, setInteractionType] = React.useState(INTERACTION_TYPES[0])
-  const [interactionLink, setInteractionLink] = React.useState('')
+  const [draft, setDraft] = React.useState<ConsentInteraction>(() => blankInteraction(1))
   const [question, setQuestion] = React.useState('')
   const [desiredAnswer, setDesiredAnswer] = React.useState('Yes')
   const [error, setError] = React.useState<string>()
@@ -246,11 +281,22 @@ function ConsentWizard({
     setDesiredAnswer('Yes')
   }
 
+  function addInteraction() {
+    setError(undefined)
+    const problem = interactionProblem(draft)
+    if (problem) {
+      setError(problem)
+      return
+    }
+    setInteractions((prev) => [...prev, cleanInteraction(draft)])
+    setDraft(blankInteraction(interactions.length + 2))
+  }
+
   async function finish() {
     setError(undefined)
     setSaving(true)
     try {
-      await eConsentsApi.add({
+      const created = await eConsentsApi.add({
         studyId,
         description: description.trim(),
         witnessRequired,
@@ -258,6 +304,10 @@ function ConsentWizard({
         questions,
         interactions,
       })
+      // Kept against the new record's id so the designer opens on the document
+      // straight away rather than asking for it again. See `document-store`
+      // for why the file does not travel in the record itself.
+      if (file) await saveDocument(created.id, file)
       toast.success('eConsent created', 'Participants can now be asked to sign it.')
       onDone()
     } catch (err) {
@@ -348,9 +398,7 @@ function ConsentWizard({
           <>
             <div className="rounded-md border border-border bg-sunken p-3">
               <p className="text-xs font-medium uppercase tracking-[0.06em] text-muted-foreground">
-                {questions.length === 0
-                  ? 'No questions yet'
-                  : `${questions.length} added`}
+                {questions.length === 0 ? 'No questions yet' : `${questions.length} added`}
               </p>
               {questions.length > 0 && (
                 <ul className="mt-2 space-y-1.5">
@@ -424,12 +472,14 @@ function ConsentWizard({
                 <ul className="mt-2 space-y-1.5">
                   {interactions.map((item, i) => (
                     <li
-                      key={`${item.link}-${i}`}
+                      key={`${item.link}-${item.question}-${i}`}
                       className="flex items-start justify-between gap-3 text-sm text-foreground"
                     >
                       <span className="min-w-0 break-all">
                         {item.type}
-                        <span className="ml-2 text-xs text-muted-foreground">{item.link}</span>
+                        <span className="ml-2 text-xs text-muted-foreground">
+                          {item.question || item.link}
+                        </span>
                       </span>
                       <Button
                         variant="ghost"
@@ -445,50 +495,9 @@ function ConsentWizard({
               )}
             </div>
 
-            <div className="grid gap-4 sm:grid-cols-[10rem_minmax(0,1fr)]">
-              <FormField id="interactionType" label="Type">
-                {(aria) => (
-                  <Select
-                    {...aria}
-                    value={interactionType}
-                    onChange={(e) => setInteractionType(e.target.value)}
-                    options={INTERACTION_TYPES}
-                  />
-                )}
-              </FormField>
+            <InteractionFields value={draft} onChange={setDraft} idPrefix="wizardInteraction" />
 
-              <FormField
-                id="interactionLink"
-                label="Video link"
-                hint="Where the participant watches it."
-              >
-                {(aria) => (
-                  <Input
-                    {...aria}
-                    value={interactionLink}
-                    onChange={(e) => setInteractionLink(e.target.value)}
-                    type="url"
-                    inputMode="url"
-                    placeholder="https://"
-                  />
-                )}
-              </FormField>
-            </div>
-
-            <Button
-              type="button"
-              variant="outline"
-              onClick={() => {
-                setError(undefined)
-                const link = interactionLink.trim()
-                if (!link) {
-                  setError('Paste the link before adding it.')
-                  return
-                }
-                setInteractions((prev) => [...prev, { type: interactionType, link }])
-                setInteractionLink('')
-              }}
-            >
+            <Button type="button" variant="outline" onClick={addInteraction}>
               <Plus aria-hidden="true" />
               Add interaction
             </Button>

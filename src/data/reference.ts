@@ -176,8 +176,31 @@ export const ASSET_TYPES = [
   'Video Links',
 ]
 
-/** What a participant can be given alongside a consent document. */
-export const INTERACTION_TYPES = ['Video']
+/** What a participant is asked to do alongside the consent document. */
+export const INTERACTION_TYPES = ['Question', 'Video']
+
+/** How a participant answers an interaction that asks them something. */
+export const INTERACTION_RESPONSE_TYPES = ['Yes/No', 'Scale', 'Free Text', 'Multiple Choice']
+
+/**
+ * The fields that can be dropped onto a consent document in the designer.
+ *
+ * Read off the legacy designer's left-hand rail. Kept here rather than inside
+ * the designer so a label anyone disagrees with is a one-line change, and so
+ * the list cannot drift from what the record stores.
+ */
+export const CONSENT_PLACEHOLDER_TYPES = [
+  'Initial',
+  'Name',
+  'Address',
+  'Signature',
+  'Date',
+  'Text',
+  'Date Time',
+  'Checkbox',
+  'Email',
+  'Cell Text',
+]
 
 /** Who an asset is published to. */
 export const ASSET_AUDIENCES = ['Participants', 'Site staff', 'Sponsor']

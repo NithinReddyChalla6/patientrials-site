@@ -210,6 +210,36 @@ export interface ConsentQuestion {
 export interface ConsentInteraction {
   type: string
   link: string
+  /** Where it falls in the sequence the participant works through. */
+  order?: number
+  /**
+   * The rest are optional because interactions saved before the legacy form
+   * was matched carry only a type and a link. A stored record is routinely
+   * older than the code reading it, and requiring these would break exactly
+   * those rows.
+   */
+  question?: string
+  responseType?: string
+  desiredAnswer?: string
+  sponsorInteraction?: string
+}
+
+/**
+ * A field placed on the consent document for someone to fill in or sign.
+ *
+ * Position and size are fractions of the page rather than pixels, because the
+ * page is drawn at whatever width the screen gives it. A placeholder saved on
+ * a laptop has to land in the same spot on a tablet.
+ */
+export interface ConsentPlaceholder {
+  id: string
+  type: string
+  /** 1-based. */
+  page: number
+  x: number
+  y: number
+  width: number
+  height: number
 }
 
 export interface EConsent {
@@ -226,6 +256,11 @@ export interface EConsent {
    * required crashed the screen on exactly those rows.
    */
   interactions?: ConsentInteraction[]
+  /**
+   * Where the signing fields sit on the document. Only the positions are kept
+   * here — the document itself is held on the device, see `lib/document-store`.
+   */
+  placeholders?: ConsentPlaceholder[]
   createdAt: string
 }
 

@@ -1113,6 +1113,47 @@ export const eConsentsApi = {
       return clone(record)
     }),
 
+  /**
+   * Change a consent in place.
+   *
+   * Takes a patch rather than the whole record so a screen that only knows
+   * about placeholders cannot blank the questions it never loaded.
+   */
+  update: (id: string, patch: Partial<Omit<EConsent, 'id' | 'studyId' | 'createdAt'>>) =>
+    write(() => {
+      const consent = db.eConsents.find((c) => c.id === id)
+      if (!consent) throw new ApiError('That consent no longer exists.', 'not_found')
+      if (patch.description !== undefined && !patch.description.trim()) {
+        throw new ApiError('Describe what this consent covers.', 'invalid')
+      }
+      Object.assign(consent, patch)
+      return clone(consent)
+    }),
+
+  /**
+   * Copy, as the legacy record page offers it.
+   *
+   * Everything comes across except the identity: a new number, a fresh created
+   * date and a name that says it is a copy, so the two are never confused in a
+   * list. The placed fields come too — reusing a laid-out document for a new
+   * amendment is the whole reason to copy one.
+   */
+  duplicate: (id: string) =>
+    write(() => {
+      const source = db.eConsents.find((c) => c.id === id)
+      if (!source) throw new ApiError('That consent no longer exists.', 'not_found')
+      const record: EConsent = {
+        ...clone(source),
+        id: nextId('ICF'),
+        description: `Copy of ${source.description}`,
+        createdAt: now(),
+      }
+      db.eConsents.push(record)
+      const study = db.studies.find((s) => s.id === record.studyId)
+      if (study) study.consentDocuments += 1
+      return clone(record)
+    }),
+
   remove: (id: string) =>
     write(() => {
       const consent = db.eConsents.find((c) => c.id === id)
