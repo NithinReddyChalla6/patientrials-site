@@ -194,8 +194,18 @@ export function AppRoutes() {
             <Route path="/emr-preview" element={<EmrPreviewPage />} />
 
             <Route path="/studies" element={<StudiesPage />} />
-            <Route path="/studies/new" element={<CreateStudyPage />} />
-            <Route path="/studies/:studyId/promote" element={<PromoteStudyPage />} />
+            {/*
+              Guarded for the same reason the study tabs are: the buttons that
+              lead here are hidden from roles without the permission, but a
+              hidden button is not a gate. An investigator holds neither of
+              these and could reach both by typing the address.
+            */}
+            <Route element={<RequirePermission permission="study.create" />}>
+              <Route path="/studies/new" element={<CreateStudyPage />} />
+            </Route>
+            <Route element={<RequirePermission permission="study.promote" />}>
+              <Route path="/studies/:studyId/promote" element={<PromoteStudyPage />} />
+            </Route>
             <Route path="/studies/:studyId" element={<StudyLayout />}>
               <Route index element={<Navigate to="participants" replace />} />
               <Route path="participants" element={<ParticipantsTab />} />
